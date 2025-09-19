@@ -1,42 +1,55 @@
 package net.coba.wyr;
 
-import com.mojang.blaze3d.systems.RenderSystem;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceLocation;
+import net.neoforged.neoforge.network.PacketDistributor;
+
 import java.util.List;
 
 public class WyrScreen extends Screen {
 
+    // --- Texture Definitions ---
+    private static final ResourceLocation TEXTURE_DEFAULT = ResourceLocation.fromNamespaceAndPath(WYR.MODID, "textures/gui/choices.png");
+    private static final ResourceLocation TEXTURE_LEFT_HIGHLIGHT = ResourceLocation.fromNamespaceAndPath(WYR.MODID, "textures/gui/left_highlighted.png");
+    private static final ResourceLocation TEXTURE_LEFT_SELECTED = ResourceLocation.fromNamespaceAndPath(WYR.MODID, "textures/gui/left_selected.png");
+    private static final ResourceLocation TEXTURE_RIGHT_HIGHLIGHT = ResourceLocation.fromNamespaceAndPath(WYR.MODID, "textures/gui/right_highlighted.png");
+    private static final ResourceLocation TEXTURE_RIGHT_SELECTED = ResourceLocation.fromNamespaceAndPath(WYR.MODID, "textures/gui/right_selected.png");
+
+    // --- GUI LAYOUT CONSTANTS ---
+    // These values MUST match the exact pixel dimensions of your main GUI background image.
+    private static final int GUI_WIDTH = 256;
+    private static final int GUI_HEIGHT = 172;
+
+    // --- CLICKABLE PANEL CONSTANTS ---
+    // These define the invisible areas that detect mouse clicks.
+    private static final int PANEL_WIDTH = 127;
+    private static final int PANEL_HEIGHT = 128;
+
+    private static final int OVERLAY_WIDTH = 256;
+    private static final int OVERLAY_HEIGHT = 254;
+    private static final int LEFT_PANEL_X_OFFSET = 8;
+    private static final int RIGHT_PANEL_X_OFFSET = 128;
+    private static final int PANEL_Y_OFFSET = 13;
+
+    private static final int TEXT_WRAP_WIDTH = 98;
+    private static final int TEXT_MARGIN_X = 8;
+    private static final int POSITIVE_TEXT_Y_OFFSET = 14;
+    private static final int NEGATIVE_TEXT_Y_OFFSET = 90;
+
+
     private final List<Choice> choices;
-
-    private ChoiceButton leftChoiceButton;
-    private ChoiceButton rightChoiceButton;
-    private Button confirmButton;
-
-    // A value of -1 means nothing is selected. 0 for left, 1 for right.
     private int selectedSide = -1;
 
+    private ClickablePanel leftPanel;
+    private ClickablePanel rightPanel;
+    private Button confirmButton;
     public static boolean isWyrScreenOpen = false;
 
-    // --- COLOR DEFINITIONS ---
-    private static final int BORDER_GRAY = 0xFF888888;
-    private static final int BACKGROUND_BLACK = 0xFF000000;
-    private static final int TITLE_COLOR = 0xFFFFFFFF;
-    private static final int OR_COLOR = 0xFFFFFFFF;
-
-    // Left Panel Colors
-    private static final int LEFT_BORDER_DARK = 0xFF0000AA;    // Dark Blue
-    private static final int LEFT_BORDER_HOVER = 0xFF5555FF;   // Lighter Blue
-    private static final int LEFT_BORDER_SELECTED = 0xFF00FFFF; // Bright Light Blue
-
-    // Right Panel Colors
-    private static final int RIGHT_BORDER_DARK = 0xFFAA0000;     // Dark Red
-    private static final int RIGHT_BORDER_HOVER = 0xFFFF5555;    // Lighter Red
-    private static final int RIGHT_BORDER_SELECTED = 0xFFFF0000; // Bright Red
 
     public WyrScreen(List<Choice> choices) {
         super(Component.literal("Would You Rather"));
@@ -45,63 +58,41 @@ public class WyrScreen extends Screen {
     }
 
     @Override
+    public boolean shouldCloseOnEsc() {
+        // Return false to prevent the screen from closing when the ESC key is pressed.
+        return false;
+    }
+
+    @Override
     protected void init() {
         super.init();
 
-        int centerX = this.width / 2;
-        int centerY = this.height / 2;
+        // Calculate the top-left corner of the entire GUI
+        int left = (this.width - GUI_WIDTH) / 2;
+        int top = (this.height - GUI_HEIGHT) / 2;
 
-        // Layout calculations
-        int panelWidth = 140;
-        int panelHeight = 120;
-        int spacing = 30;
-        int totalContentWidth = (panelWidth * 2) + spacing;
+        // Position the clickable panels using the new offset constants
+        int leftPanelX = left + LEFT_PANEL_X_OFFSET;
+        int panelY = top + PANEL_Y_OFFSET;
+        int rightPanelX = left + RIGHT_PANEL_X_OFFSET;
 
-        int leftPanelX = centerX - totalContentWidth / 2;
-        int rightPanelX = leftPanelX + panelWidth + spacing;
-        int panelY = centerY - panelHeight / 2;
+        this.leftPanel = this.addRenderableWidget(new ClickablePanel(leftPanelX, panelY, PANEL_WIDTH, PANEL_HEIGHT, () -> selectChoice(0)));
+        this.rightPanel = this.addRenderableWidget(new ClickablePanel(rightPanelX, panelY, PANEL_WIDTH, PANEL_HEIGHT, () -> selectChoice(1)));
 
-        // Ensure we have choices to display
-        Choice leftRawChoice = choices.size() > 0 ? choices.get(0) : new Choice("missing_left", "Left choice missing", "Check ChoiceRegistry.java");
-        Choice rightRawChoice = choices.size() > 1 ? choices.get(1) : new Choice("missing_right", "Right choice missing", "Check ChoiceRegistry.java");
-
-        // Create the choice buttons
-        leftChoiceButton = new ChoiceButton(leftPanelX, panelY, panelWidth, panelHeight,
-                Component.literal(leftRawChoice.positive()),
-                Component.literal(leftRawChoice.negative()),
-                button -> selectChoice(0)); // Click on left panel selects side 0
-        this.addRenderableWidget(leftChoiceButton);
-
-        rightChoiceButton = new ChoiceButton(rightPanelX, panelY, panelWidth, panelHeight,
-                Component.literal(rightRawChoice.positive()),
-                Component.literal(rightRawChoice.negative()),
-                button -> selectChoice(1)); // Click on right panel selects side 1
-        this.addRenderableWidget(rightChoiceButton);
-
-        // Main frame dimensions, calculated to fit the content
-        int frameWidth = totalContentWidth + 24;
-        int frameHeight = panelHeight + 40;
-        int frameX = centerX - frameWidth / 2;
-        int frameY = centerY - frameHeight / 2;
-
-        // Position the confirm button below the main frame
-        int confirmButtonY = frameY + frameHeight + 8;
-        confirmButton = Button.builder(Component.literal("Confirm"), btn -> {
+        this.confirmButton = this.addRenderableWidget(Button.builder(Component.literal("Confirm"), btn -> {
             if (selectedSide != -1 && Minecraft.getInstance().player != null) {
                 Choice selectedChoice = choices.get(selectedSide);
-                // Apply the selected effect
-                ChoiceEffects.applyEffect(Minecraft.getInstance().player, selectedChoice.getId());
-                PromptManager.resetAndResumeTimer(); // Resume the timer
+                PacketDistributor.sendToServer(new PacketApplyEffect(selectedChoice.getId()));
+                PromptManager.resetAndResumeTimer();
                 this.onClose();
             }
-        }).bounds(centerX - 50, confirmButtonY, 100, 20).build();
-        confirmButton.active = false; // Disabled until a choice is made
-        this.addRenderableWidget(confirmButton);
+        }).bounds(this.width / 2 - 50, top + GUI_HEIGHT + 8, 100, 20).build());
+        this.confirmButton.active = false;
     }
 
     private void selectChoice(int side) {
         this.selectedSide = side;
-        this.confirmButton.active = true; // Enable confirm button upon selection
+        this.confirmButton.active = true;
     }
 
     @Override
@@ -112,65 +103,62 @@ public class WyrScreen extends Screen {
 
     @Override
     public void render(GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
-        // Draw the semi-transparent background overlay
         this.renderBackground(guiGraphics, mouseX, mouseY, partialTick);
 
-        Font font = Minecraft.getInstance().font;
-        int centerX = this.width / 2;
-        int centerY = this.height / 2;
+        // Calculate the top-left corner of the GUI for positioning all elements
+        int left = (this.width - GUI_WIDTH) / 2;
+        int top = (this.height - GUI_HEIGHT) / 2;
 
-        // --- Main Frame Drawing ---
-        int frameWidth = (leftChoiceButton.getWidth() * 2) + 30 + 24;
-        int frameHeight = leftChoiceButton.getHeight() + 40;
-        int frameX = centerX - frameWidth / 2;
-        int frameY = centerY - frameHeight / 2;
-        int borderThickness = 4;
 
-        // 1. Outer grey border
-        guiGraphics.fill(frameX, frameY, frameX + frameWidth, frameY + frameHeight, BORDER_GRAY);
-
-        // 2. Inner black background
-        guiGraphics.fill(frameX + borderThickness, frameY + borderThickness,
-                frameX + frameWidth - borderThickness, frameY + frameHeight - borderThickness, BACKGROUND_BLACK);
-
-        // 3. Title text
-        Component title = Component.literal("Would You Rather");
-        int titleWidth = font.width(title);
-        // Custom title position to be inside the top border
-        guiGraphics.fill(centerX - titleWidth / 2 - 4, frameY - 2, centerX + titleWidth / 2 + 4, frameY + font.lineHeight + 2, BORDER_GRAY);
-        guiGraphics.drawString(font, title, centerX - titleWidth / 2, frameY, TITLE_COLOR, false);
-
-        // 4. "OR" text between panels
-        int orTextY = leftChoiceButton.getY() + leftChoiceButton.getHeight() / 2 - font.lineHeight / 2;
-        guiGraphics.drawString(font, "OR", centerX - font.width("OR") / 2, orTextY, OR_COLOR, true);
-
-        // --- Choice Panel Border Drawing ---
-        int panelBorderThickness = 2;
-
-        // Determine left border color based on state (selected, hovered, or default)
-        int leftBorderColor = LEFT_BORDER_DARK;
-        if (selectedSide == 0) {
-            leftBorderColor = LEFT_BORDER_SELECTED;
-        } else if (leftChoiceButton.isHoveredOrFocused()) {
-            leftBorderColor = LEFT_BORDER_HOVER;
-        }
-        guiGraphics.fill(leftChoiceButton.getX() - panelBorderThickness, leftChoiceButton.getY() - panelBorderThickness,
-                leftChoiceButton.getX() + leftChoiceButton.getWidth() + panelBorderThickness, leftChoiceButton.getY() + leftChoiceButton.getHeight() + panelBorderThickness,
-                leftBorderColor);
-
-        // Determine right border color based on state
-        int rightBorderColor = RIGHT_BORDER_DARK;
-        if (selectedSide == 1) {
-            rightBorderColor = RIGHT_BORDER_SELECTED;
-        } else if (rightChoiceButton.isHoveredOrFocused()) {
-            rightBorderColor = RIGHT_BORDER_HOVER;
-        }
-        guiGraphics.fill(rightChoiceButton.getX() - panelBorderThickness, rightChoiceButton.getY() - panelBorderThickness,
-                rightChoiceButton.getX() + rightChoiceButton.getWidth() + panelBorderThickness, rightChoiceButton.getY() + rightChoiceButton.getHeight() + panelBorderThickness,
-                rightBorderColor);
-
-        // Render all widgets (buttons) on top of our custom-drawn GUI
+        // Render the vanilla widgets (e.g., the Confirm button) on top of everything else.
         super.render(guiGraphics, mouseX, mouseY, partialTick);
+
+        // Always draw the default background texture first.
+        guiGraphics.blit(TEXTURE_DEFAULT, left, top, 0, 0, GUI_WIDTH, GUI_HEIGHT, GUI_WIDTH, GUI_HEIGHT);
+
+
+        // Calculate the absolute screen coordinates for the overlays using the offsets.
+        int leftOverlayX = left + LEFT_PANEL_X_OFFSET;
+        int rightOverlayX = left + RIGHT_PANEL_X_OFFSET;
+        int overlayY = top + PANEL_Y_OFFSET;
+
+        // Draw the highlight or selection texture for the left panel if needed.
+        if (selectedSide == 0) {
+            guiGraphics.blit(TEXTURE_LEFT_SELECTED, leftOverlayX, overlayY, 0, 0, OVERLAY_WIDTH, OVERLAY_HEIGHT, OVERLAY_WIDTH, OVERLAY_HEIGHT);
+        } else if (leftPanel.isHoveredOrFocused()) {
+            guiGraphics.blit(TEXTURE_LEFT_HIGHLIGHT, leftOverlayX, overlayY, 0, 0, OVERLAY_WIDTH, OVERLAY_HEIGHT, OVERLAY_WIDTH, OVERLAY_HEIGHT);
+        }
+
+        // Draw the highlight or selection texture for the right panel if needed.
+        if (selectedSide == 1) {
+            guiGraphics.blit(TEXTURE_RIGHT_SELECTED, rightOverlayX, overlayY, 0, 0, OVERLAY_WIDTH, OVERLAY_HEIGHT, OVERLAY_WIDTH, OVERLAY_HEIGHT);
+        } else if (rightPanel.isHoveredOrFocused()) {
+            guiGraphics.blit(TEXTURE_RIGHT_HIGHLIGHT, rightOverlayX, overlayY, 0, 0, OVERLAY_WIDTH, OVERLAY_HEIGHT, OVERLAY_WIDTH, OVERLAY_HEIGHT);
+        }
+
+
+        // Draw the choice text on top of the background and any overlays.
+        Choice leftChoice = choices.get(0);
+        Choice rightChoice = choices.get(1);
+        renderChoiceText(guiGraphics, leftChoice, leftPanel.getX(), leftPanel.getY());
+        renderChoiceText(guiGraphics, rightChoice, rightPanel.getX(), rightPanel.getY());
+
+    }
+
+    private void renderChoiceText(GuiGraphics guiGraphics, Choice choice, int panelX, int panelY) {
+        Font font = Minecraft.getInstance().font;
+        int textColor = 0xFFFFFFFF;
+
+        // Calculate absolute positions using the panel's origin and the new offsets
+        int textX = panelX + TEXT_MARGIN_X;
+        int positiveTextY = panelY + POSITIVE_TEXT_Y_OFFSET;
+        int negativeTextY = panelY + NEGATIVE_TEXT_Y_OFFSET;
+
+        // Render the positive text (top box)
+        guiGraphics.drawWordWrap(font, Component.literal(choice.positive()), textX, positiveTextY, TEXT_WRAP_WIDTH, textColor);
+
+        // Render the negative text (bottom box)
+        guiGraphics.drawWordWrap(font, Component.literal(choice.negative()), textX, negativeTextY, TEXT_WRAP_WIDTH, textColor);
     }
 
     @Override

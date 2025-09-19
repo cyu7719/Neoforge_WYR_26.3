@@ -5,6 +5,8 @@ import net.minecraft.world.entity.player.Player;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.neoforge.client.event.ClientTickEvent;
 import net.neoforged.neoforge.event.entity.player.PlayerEvent;
+import net.neoforged.neoforge.network.PacketDistributor;
+
 import java.util.List;
 
 public class PromptManager {
@@ -12,8 +14,9 @@ public class PromptManager {
     private static int intervalTicks = 0;
     private static int currentTicks = 0;
     private static boolean isPaused = false;
-    private static int timesShown = 0;
-    private static final int MAX_TIMES_SHOWN = 20;
+    // The 20-prompt limit is now handled server-side and is persistent.
+    // private static int timesShown = 0;
+    // private static final int MAX_TIMES_SHOWN = 20;
 
     private static List<Choice> lastShownChoices = null;
     private static boolean shouldShowOnRespawn = false;
@@ -25,11 +28,11 @@ public class PromptManager {
             case "3min" -> 180 * 20;
             case "5min" -> 300 * 20;
             case "10min" -> 600 * 20;
-            default -> 0; // "None"
+            default -> 0;
         };
         currentTicks = 0;
-        timesShown = 0;
         isPaused = false;
+        // The client no longer has control over resetting the shown pairs list.
     }
 
     public static void resetAndResumeTimer() {
@@ -41,9 +44,7 @@ public class PromptManager {
 
     private void showChoiceScreen() {
         if (Minecraft.getInstance().screen == null) {
-            lastShownChoices = ChoiceRegistry.getRandomChoices(2);
-            Minecraft.getInstance().setScreen(new WyrScreen(lastShownChoices));
-            timesShown++;
+            PacketDistributor.sendToServer(new PacketRequestNewChoices());
             isPaused = true;
         }
     }
@@ -55,9 +56,15 @@ public class PromptManager {
         }
     }
 
+    public static void setLastShownChoices(List<Choice> choices) {
+        lastShownChoices = choices;
+    }
+
+
     @SubscribeEvent
     public void onClientTick(ClientTickEvent.Post event) {
-        if (intervalTicks > 0 && Minecraft.getInstance().level != null && !isPaused && timesShown < MAX_TIMES_SHOWN) {
+        // The server now decides if the player has reached their prompt limit.
+        if (intervalTicks > 0 && Minecraft.getInstance().level != null && !isPaused) {
             currentTicks++;
             if (currentTicks >= intervalTicks) {
                 showChoiceScreen();
@@ -87,7 +94,7 @@ public class PromptManager {
 
     @SubscribeEvent
     public void onPlayerLoggedOut(PlayerEvent.PlayerLoggedOutEvent event) {
-        setPromptInterval("None");
+        setPromptInterval("Disabled");
         lastShownChoices = null;
         shouldShowOnRespawn = false;
     }
