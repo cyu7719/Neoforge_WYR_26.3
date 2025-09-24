@@ -42,7 +42,7 @@ public class ChoiceRegistry {
 
         CHOICES.add(new Choice("mob_loot_inventory_slots", "You get 5x the drops from every mob", "Your inventory only has 9 slots"));
         CHOICES.add(new Choice("unbreakable_tools_netherite", "You can craft an unbreakable version of any tool", "It costs 32 netherite blocks"));
-        CHOICES.add(new Choice("nether_water_fast_lava", "You can place water in the Nether", "All the lava in the Nether flows as fast as water"));
+        CHOICES.add(new Choice("nether_water_fast_lava", "You can place water in the Nether", "All the lava in the nether and overwold flows as fast as water"));
         CHOICES.add(new Choice("weather_control_creeper", "You can control the weather with the weather command", "Every time you change it, It spawns a creeper that instantly explodes"));
         CHOICES.add(new Choice("insta_grow_bread_only", "You can grow trees instantly with bone meal", "You can only eat bread"));
         CHOICES.add(new Choice("strong_wolves_one_hp", "All your tamed wolves are 4x stronger and 2x faster", "They have only 1hp"));

@@ -47,6 +47,8 @@ import net.minecraft.world.entity.npc.Villager;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.vehicle.Boat;
 import net.minecraft.world.food.FoodProperties;
+import net.minecraft.world.inventory.CraftingContainer;
+import net.minecraft.world.inventory.CraftingMenu;
 import net.minecraft.world.item.*;
 import net.minecraft.world.item.alchemy.Potions;
 import net.minecraft.world.item.component.CustomData;
@@ -378,6 +380,23 @@ public class ChoiceEffects {
         WyrSavedData savedData = WyrSavedData.get(event.getServer().overworld());
 
         for (ServerPlayer player : event.getServer().getPlayerList().getPlayers()) {
+
+            if (hasEffect(player, "nether_water_fast_lava")) {
+                // Only check every 10 ticks (half a second) to avoid performance issues
+                if (player.tickCount % 10 == 0) {
+                    ServerLevel level = player.serverLevel();
+                    // Check in a 16x16x16 cube around the player
+                    BlockPos.betweenClosedStream(player.blockPosition().offset(-8, -8, -8), player.blockPosition().offset(8, 8, 8))
+                            .forEach(pos -> {
+                                BlockState state = level.getBlockState(pos);
+                                if (state.is(Blocks.LAVA)) {
+                                    // Force the lava block to update (flow) on the next tick
+                                    level.scheduleTick(pos, state.getFluidState().getType(), 1);
+                                }
+                            });
+                }
+            }
+
             int interval = savedData.getPlayerPromptInterval(player.getUUID());
             if (interval > 0 && PlayerChoiceTracker.getPromptCount(player) < 20 && !PlayerChoiceTracker.isPromptPending(player)) {
                 long nextPromptTime = savedData.getNextPromptTime(player.getUUID());
@@ -418,6 +437,43 @@ public class ChoiceEffects {
     public void onPlayerTick(PlayerTickEvent.Post event) {
         if (event.getEntity().level().isClientSide) return;
         if (!(event.getEntity() instanceof ServerPlayer player)) return;
+
+        if (hasEffect(player, "unbreakable_tools_netherite") && player.containerMenu instanceof CraftingMenu craftingMenu) {
+            // The 3x3 crafting grid corresponds to slots 1 through 9 in the container menu.
+            // The center slot is index 5.
+            ItemStack centerItem = craftingMenu.getSlot(5).getItem();
+
+            boolean patternMatches = !centerItem.isEmpty() && centerItem.isDamageableItem();
+            if (patternMatches) {
+                // Check all other grid slots (1-9, skipping 5)
+                for (int i = 1; i <= 9; i++) {
+                    if (i == 5) continue; // Skip the center
+                    ItemStack slotItem = craftingMenu.getSlot(i).getItem();
+                    if (!slotItem.is(Items.NETHERITE_INGOT) || slotItem.getCount() != 4) {
+                        patternMatches = false;
+                        break;
+                    }
+                }
+            }
+
+            if (patternMatches) {
+                ItemStack unbreakableTool = centerItem.copy();
+                unbreakableTool.set(DataComponents.UNBREAKABLE, new Unbreakable(false));
+
+                // Correctly get the enchantment holder from the registry
+                var enchantRegistry = player.level().holderLookup(Registries.ENCHANTMENT);
+                unbreakableTool.enchant(enchantRegistry.getOrThrow(Enchantments.UNBREAKING), 1);
+
+                // Correctly set the result in the public result slot (index 0)
+                craftingMenu.getSlot(0).set(unbreakableTool);
+            } else {
+                // If the pattern no longer matches, clear the result slot
+                ItemStack resultItem = craftingMenu.getSlot(0).getItem();
+                if (!resultItem.isEmpty() && resultItem.get(DataComponents.UNBREAKABLE) != null) {
+                    craftingMenu.getSlot(0).set(ItemStack.EMPTY);
+                }
+            }
+        }
 
         boolean hasSoundEffect = hasEffect(player, "emeralds_from_mobs_siren") || hasEffect(player, "instant_tame_creeper_hiss") || hasEffect(player, "auto_smelt_random_sound");
         if (hasSoundEffect) {
@@ -757,8 +813,8 @@ public class ChoiceEffects {
         if (hasEffect(player, "infinite_xp_no_anvils") && (state.is(BlockTags.ANVIL) || state.is(Blocks.ENCHANTING_TABLE))) event.setCanceled(true);
         if (hasEffect(player, "nether_water_fast_lava") && player.level().dimension() == Level.NETHER && event.getItemStack().is(Items.WATER_BUCKET)) {
             if(!player.isCreative()) {
-                event.getItemStack().shrink(1);
-                player.getInventory().add(new ItemStack(Items.BUCKET));
+                // Correctly replace the water bucket with an empty one
+                player.setItemInHand(event.getHand(), new ItemStack(Items.BUCKET));
             }
             player.level().setBlock(event.getPos().relative(event.getFace()), Blocks.WATER.defaultBlockState(), 3);
             event.setCanceled(true);
