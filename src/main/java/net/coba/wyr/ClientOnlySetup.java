@@ -24,5 +24,7 @@ public class ClientOnlySetup {
         NeoForge.EVENT_BUS.register(new InputEventHandler());
         NeoForge.EVENT_BUS.register(new HudEventHandler());
         NeoForge.EVENT_BUS.register(new ThirstHudHandler());
+
+        NeoForge.EVENT_BUS.register(new ClientEffectsHandler());
     }
 }

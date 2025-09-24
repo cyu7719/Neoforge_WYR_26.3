@@ -1,3 +1,4 @@
+// PacketRequestNewChoices.java
 package net.coba.wyr;
 
 import net.minecraft.network.FriendlyByteBuf;
@@ -26,7 +27,11 @@ public record PacketRequestNewChoices() implements CustomPacketPayload {
                 // Server-side check: Only send choices if the player is under the 20 prompt limit.
                 if (PlayerChoiceTracker.getPromptCount(serverPlayer) < 20) {
                     List<Choice> choices = ChoiceRegistry.getFilteredRandomChoicesForPlayer(serverPlayer);
-                    PacketDistributor.sendToPlayer(serverPlayer, new PacketSyncNewChoices(choices));
+                    if (!choices.isEmpty()) {
+                        // --- MODIFICATION: Set pending status before sending ---
+                        PlayerChoiceTracker.setPromptPending(serverPlayer, true);
+                        PacketDistributor.sendToPlayer(serverPlayer, new PacketSyncNewChoices(choices));
+                    }
                 } else {
                     // If the limit is reached, send an empty list. The client will not open the GUI.
                     PacketDistributor.sendToPlayer(serverPlayer, new PacketSyncNewChoices(Collections.emptyList()));

@@ -1,0 +1,20 @@
+{
+  "emeralds_siren": {
+    "sounds": [
+      "wouldyourather:custom/siren"
+    ],
+    "subtitle": "subtitle.wouldyourather.emeralds_siren"
+  },
+  "tame_hiss": {
+    "sounds": [
+      "wouldyourather:custom/creeper_hiss"
+    ],
+    "subtitle": "subtitle.wouldyourather.tame_hiss"
+  },
+  "auto_smelt_knock": {
+    "sounds": [
+      "wouldyourather:custom/knocking_on_door"
+    ],
+    "subtitle": "subtitle.wouldyourather.auto_smelt_knock"
+  }
+}

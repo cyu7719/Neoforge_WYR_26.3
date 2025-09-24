@@ -1,3 +1,4 @@
+// PromptManager.java
 package net.coba.wyr;
 
 import net.minecraft.client.Minecraft;
@@ -11,65 +12,26 @@ import java.util.List;
 
 public class PromptManager {
 
-    private static int intervalTicks = 0;
-    private static int currentTicks = 0;
-    private static boolean isPaused = false;
-    // The 20-prompt limit is now handled server-side and is persistent.
-    // private static int timesShown = 0;
-    // private static final int MAX_TIMES_SHOWN = 20;
-
     private static List<Choice> lastShownChoices = null;
     private static boolean shouldShowOnRespawn = false;
 
-    public static void setPromptInterval(String intervalValue) {
-        intervalTicks = switch (intervalValue) {
-            case "30s" -> 30 * 20;
-            case "1min" -> 60 * 20;
-            case "3min" -> 180 * 20;
-            case "5min" -> 300 * 20;
-            case "10min" -> 600 * 20;
-            default -> 0;
-        };
-        currentTicks = 0;
-        isPaused = false;
-        // The client no longer has control over resetting the shown pairs list.
-    }
+    // The timer logic has been removed from the client and moved to the server.
 
     public static void resetAndResumeTimer() {
-        currentTicks = 0;
-        isPaused = false;
+        // This is called when the client confirms a choice.
+        // The server will handle restarting the timer.
         lastShownChoices = null;
         shouldShowOnRespawn = false;
-    }
-
-    private void showChoiceScreen() {
-        if (Minecraft.getInstance().screen == null) {
-            PacketDistributor.sendToServer(new PacketRequestNewChoices());
-            isPaused = true;
-        }
     }
 
     private void showPreviousChoiceScreen() {
         if (Minecraft.getInstance().screen == null && lastShownChoices != null) {
             Minecraft.getInstance().setScreen(new WyrScreen(lastShownChoices));
-            isPaused = true;
         }
     }
 
     public static void setLastShownChoices(List<Choice> choices) {
         lastShownChoices = choices;
-    }
-
-
-    @SubscribeEvent
-    public void onClientTick(ClientTickEvent.Post event) {
-        // The server now decides if the player has reached their prompt limit.
-        if (intervalTicks > 0 && Minecraft.getInstance().level != null && !isPaused) {
-            currentTicks++;
-            if (currentTicks >= intervalTicks) {
-                showChoiceScreen();
-            }
-        }
     }
 
     @SubscribeEvent
@@ -94,7 +56,7 @@ public class PromptManager {
 
     @SubscribeEvent
     public void onPlayerLoggedOut(PlayerEvent.PlayerLoggedOutEvent event) {
-        setPromptInterval("Disabled");
+        // Clear client-side cache on logout
         lastShownChoices = null;
         shouldShowOnRespawn = false;
     }

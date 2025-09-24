@@ -1,83 +1,147 @@
+// ChoiceEffects.java
 package net.coba.wyr;
 
+import com.mojang.brigadier.context.CommandContext;
+import com.mojang.brigadier.exceptions.CommandSyntaxException;
+import net.coba.wyr.item.ModItems;
+import net.coba.wyr.sound.ModSounds;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.Holder;
 import net.minecraft.core.component.DataComponents;
+import net.minecraft.core.particles.ParticleTypes;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.sounds.SoundEvent;
+import net.minecraft.sounds.SoundEvents;
+import net.minecraft.sounds.SoundSource;
+import net.minecraft.tags.BiomeTags;
 import net.minecraft.tags.BlockTags;
 import net.minecraft.tags.DamageTypeTags;
 import net.minecraft.tags.ItemTags;
+import net.minecraft.util.RandomSource;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.effect.MobEffect;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.effect.MobEffects;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.ai.attributes.AttributeInstance;
 import net.minecraft.world.entity.ai.attributes.AttributeModifier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
-import net.minecraft.world.entity.monster.EnderMan;
-import net.minecraft.world.entity.monster.Guardian;
+import net.minecraft.world.entity.animal.Wolf;
+import net.minecraft.world.entity.animal.horse.Horse;
+import net.minecraft.world.entity.item.ItemEntity;
+import net.minecraft.world.entity.monster.Creeper;
 import net.minecraft.world.entity.monster.Monster;
+import net.minecraft.world.entity.npc.Villager;
 import net.minecraft.world.entity.player.Player;
-import net.minecraft.world.item.AxeItem;
-import net.minecraft.world.item.EnchantedBookItem;
-import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.Items;
-import net.minecraft.world.item.ShieldItem;
+import net.minecraft.world.entity.vehicle.Boat;
+import net.minecraft.world.food.FoodProperties;
+import net.minecraft.world.item.*;
 import net.minecraft.world.item.alchemy.Potions;
 import net.minecraft.world.item.component.CustomData;
+import net.minecraft.world.item.component.Unbreakable;
 import net.minecraft.world.item.enchantment.Enchantment;
 import net.minecraft.world.item.enchantment.EnchantmentHelper;
 import net.minecraft.world.item.enchantment.Enchantments;
+import net.minecraft.world.item.trading.MerchantOffer;
 import net.minecraft.world.level.ClipContext;
-import net.minecraft.world.level.block.Block;
-import net.minecraft.world.level.block.Blocks;
-import net.minecraft.world.level.block.DoorBlock;
-import net.minecraft.world.level.block.EnchantingTableBlock;
+import net.minecraft.world.level.GameRules;
+import net.minecraft.world.level.GameType;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.*;
+import net.minecraft.world.level.block.entity.AbstractFurnaceBlockEntity;
+import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.level.material.FluidState;
-import net.minecraft.world.level.storage.loot.BuiltInLootTables;
-import net.minecraft.world.level.storage.loot.LootParams;
-import net.minecraft.world.level.storage.loot.LootTable;
-import net.minecraft.world.level.storage.loot.parameters.LootContextParamSets;
-import net.minecraft.world.level.storage.loot.parameters.LootContextParams;
-import net.minecraft.world.phys.AABB;
+import net.minecraft.world.item.crafting.SingleRecipeInput;
+import net.minecraft.world.item.crafting.RecipeHolder;
+import net.minecraft.world.item.crafting.RecipeType;
+import net.minecraft.world.item.crafting.SmeltingRecipe;
+import net.minecraft.world.level.gameevent.GameEvent;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.neoforge.event.AnvilUpdateEvent;
+import net.neoforged.neoforge.event.CommandEvent;
+import net.neoforged.neoforge.event.brewing.PlayerBrewedPotionEvent;
+import net.neoforged.neoforge.event.brewing.PotionBrewEvent;
+import net.neoforged.neoforge.event.entity.EntityJoinLevelEvent;
 import net.neoforged.neoforge.event.entity.living.*;
-import net.neoforged.neoforge.event.entity.player.AttackEntityEvent;
-import net.neoforged.neoforge.event.entity.player.ItemFishedEvent;
-import net.neoforged.neoforge.event.entity.player.PlayerEvent;
-import net.neoforged.neoforge.event.entity.player.PlayerInteractEvent;
+import net.neoforged.neoforge.event.entity.player.*;
 import net.neoforged.neoforge.event.level.BlockEvent;
+import net.neoforged.neoforge.event.server.ServerStartingEvent;
 import net.neoforged.neoforge.event.tick.PlayerTickEvent;
+import net.neoforged.neoforge.event.tick.ServerTickEvent;
+import net.neoforged.neoforge.event.village.VillagerTradesEvent;
+import net.minecraft.world.entity.monster.EnderMan;
 import net.neoforged.neoforge.network.PacketDistributor;
+import net.neoforged.neoforge.registries.DeferredHolder;
+import net.minecraft.world.entity.animal.Sheep;
+import net.minecraft.world.item.DyeColor;
 
+import java.util.stream.Collectors;
 import java.util.*;
 
 public class ChoiceEffects {
+    // In-memory maps for effects active on currently online players
     private static final Map<UUID, Set<String>> activeEffects = new HashMap<>();
     private static final Map<UUID, Integer> playerTickCounters = new HashMap<>();
     private static final Map<UUID, Long> teleportCooldowns = new HashMap<>();
-    private static final Map<UUID, Integer> fishCatchCount = new HashMap<>();
     private static final Map<UUID, Long> dailyDiamondCooldown = new HashMap<>();
+    private static final Map<UUID, BlockPos> respawnLocations = new HashMap<>();
+    private static final Map<UUID, ResourceKey<Level>> respawnDimensions = new HashMap<>();
+    private static final Map<UUID, Horse> fastHorses = new HashMap<>();
+    private static final Map<UUID, Set<UUID>> tamedMonsters = new HashMap<>();
+    private static final Map<UUID, Integer> randomSoundTimers = new HashMap<>();
+    private static final Map<UUID, ResourceKey<net.minecraft.world.level.biome.Biome>> spawnBiomes = new HashMap<>();
+
 
     private static final ResourceLocation INSTA_HEAL_HEALTH_MODIFIER_ID = ResourceLocation.fromNamespaceAndPath(WYR.MODID, "insta_heal_health_modifier");
     private static final ResourceLocation EXTRA_HEARTS_HEALTH_MODIFIER_ID = ResourceLocation.fromNamespaceAndPath(WYR.MODID, "extra_hearts_health_modifier");
+    private static final ResourceLocation GOLEM_HEALTH_MODIFIER_ID = ResourceLocation.fromNamespaceAndPath(WYR.MODID, "golem_health");
+    private static final ResourceLocation GOLEM_STRENGTH_MODIFIER_ID = ResourceLocation.fromNamespaceAndPath(WYR.MODID, "golem_strength");
+    private static final ResourceLocation GOLEM_SPEED_MODIFIER_ID = ResourceLocation.fromNamespaceAndPath(WYR.MODID, "golem_speed");
+    private static final ResourceLocation WOLF_HEALTH_MODIFIER_ID = ResourceLocation.fromNamespaceAndPath(WYR.MODID, "wolf_health");
+    private static final ResourceLocation WOLF_STRENGTH_MODIFIER_ID = ResourceLocation.fromNamespaceAndPath(WYR.MODID, "wolf_strength");
+    private static final ResourceLocation WOLF_SPEED_MODIFIER_ID = ResourceLocation.fromNamespaceAndPath(WYR.MODID, "wolf_speed");
+
+    private static final Map<DyeColor, Item> WOOL_BY_COLOR = Map.ofEntries(
+            Map.entry(DyeColor.WHITE, Items.WHITE_WOOL),
+            Map.entry(DyeColor.ORANGE, Items.ORANGE_WOOL),
+            Map.entry(DyeColor.MAGENTA, Items.MAGENTA_WOOL),
+            Map.entry(DyeColor.LIGHT_BLUE, Items.LIGHT_BLUE_WOOL),
+            Map.entry(DyeColor.YELLOW, Items.YELLOW_WOOL),
+            Map.entry(DyeColor.LIME, Items.LIME_WOOL),
+            Map.entry(DyeColor.PINK, Items.PINK_WOOL),
+            Map.entry(DyeColor.GRAY, Items.GRAY_WOOL),
+            Map.entry(DyeColor.LIGHT_GRAY, Items.LIGHT_GRAY_WOOL),
+            Map.entry(DyeColor.CYAN, Items.CYAN_WOOL),
+            Map.entry(DyeColor.PURPLE, Items.PURPLE_WOOL),
+            Map.entry(DyeColor.BLUE, Items.BLUE_WOOL),
+            Map.entry(DyeColor.BROWN, Items.BROWN_WOOL),
+            Map.entry(DyeColor.GREEN, Items.GREEN_WOOL),
+            Map.entry(DyeColor.RED, Items.RED_WOOL),
+            Map.entry(DyeColor.BLACK, Items.BLACK_WOOL)
+    );
+
 
     private static Set<String> getActiveEffects(Player player) {
         return activeEffects.computeIfAbsent(player.getUUID(), k -> new HashSet<>());
     }
 
     public static boolean hasEffect(Player player, String effectId) {
+        if (player == null) return false;
         return getActiveEffects(player).contains(effectId);
     }
 
@@ -85,92 +149,172 @@ public class ChoiceEffects {
         return teleportCooldowns.getOrDefault(player.getUUID(), 0L);
     }
 
-    public static void applyEffect(Player player, String effectId) {
+    private static ServerPlayer getServerPlayer(Player player) {
+        if (player instanceof ServerPlayer serverPlayer) {
+            return serverPlayer;
+        }
+        if (player.level().isClientSide() || player.getServer() == null) return null;
+        return player.getServer().getPlayerList().getPlayer(player.getUUID());
+    }
+
+    public static void applyInitialEffect(Player player, String effectId) {
+        var serverPlayer = getServerPlayer(player);
+        if (serverPlayer == null) return;
+        var enchantRegistry = player.level().holderLookup(Registries.ENCHANTMENT);
+
+        // --- ONE-TIME ACTIONS ---
+        if ("op_bow_only".equals(effectId)) {
+            ItemStack opBow = new ItemStack(Items.BOW);
+            opBow.enchant(enchantRegistry.getOrThrow(Enchantments.INFINITY), 1);
+            opBow.enchant(enchantRegistry.getOrThrow(Enchantments.POWER), 5);
+            opBow.enchant(enchantRegistry.getOrThrow(Enchantments.PUNCH), 5);
+            opBow.enchant(enchantRegistry.getOrThrow(Enchantments.LOOTING), 5);
+            opBow.set(DataComponents.CUSTOM_NAME, Component.literal("The Only Weapon"));
+            serverPlayer.getInventory().add(opBow);
+            serverPlayer.getInventory().add(new ItemStack(Items.ARROW));
+        }
+        if ("fast_horse_dark_fear".equals(effectId)) {
+            Horse horse = EntityType.HORSE.create(serverPlayer.level());
+            if (horse != null) {
+                horse.setPos(serverPlayer.getX(), serverPlayer.getY(), serverPlayer.getZ());
+                horse.setTamed(true);
+                horse.setOwnerUUID(serverPlayer.getUUID());
+                horse.getInventory().setItem(0, new ItemStack(Items.SADDLE));
+                Objects.requireNonNull(horse.getAttribute(Attributes.MOVEMENT_SPEED)).setBaseValue(0.1 + (0.3375 * 0.7));
+                serverPlayer.level().addFreshEntity(horse);
+                fastHorses.put(serverPlayer.getUUID(), horse);
+            }
+        }
+        if ("unbreakable_elytra_no_boost".equals(effectId)) {
+            ItemStack elytra = new ItemStack(Items.ELYTRA);
+            elytra.set(DataComponents.UNBREAKABLE, new Unbreakable(false));
+            serverPlayer.getInventory().add(elytra);
+        }
+        if ("unbreakable_anvil_no_xp".equals(effectId)) {
+            serverPlayer.getInventory().add(new ItemStack(Items.ANVIL));
+        }
+        if ("stack_64_world_height".equals(effectId)) {
+            serverPlayer.teleportTo(serverPlayer.getX(), serverPlayer.level().getMaxBuildHeight() + 1, serverPlayer.getZ());
+        }
+        if ("choose_spawn_biome_lock".equals(effectId)) {
+            player.level().getBiome(player.blockPosition()).unwrapKey().ifPresent(key -> spawnBiomes.put(player.getUUID(), key));
+        }
+        switch (effectId) {
+            case "fire_sword_self_damage" -> {
+                ItemStack sword = new ItemStack(Items.DIAMOND_SWORD);
+                sword.enchant(enchantRegistry.getOrThrow(Enchantments.FIRE_ASPECT), 10);
+                serverPlayer.getInventory().add(sword);
+            }
+            case "lava_fishing_rod" -> {
+                ItemStack rod = new ItemStack(Items.FISHING_ROD);
+                rod.enchant(enchantRegistry.getOrThrow(Enchantments.LUCK_OF_THE_SEA), 5);
+                serverPlayer.getInventory().add(rod);
+            }
+            case "golem_suit_slow" -> {
+                serverPlayer.getInventory().add(new ItemStack(ModItems.GOLEM_HELMET.get()));
+                serverPlayer.getInventory().add(new ItemStack(ModItems.GOLEM_CHESTPLATE.get()));
+                serverPlayer.getInventory().add(new ItemStack(ModItems.GOLEM_LEGGINGS.get()));
+                serverPlayer.getInventory().add(new ItemStack(ModItems.GOLEM_BOOTS.get()));
+            }
+            case "personal_teleporter_scramble" -> serverPlayer.getInventory().add(new ItemStack(ModItems.PERSONAL_TELEPORTER.get()));
+            case "unlimited_ice_cream_brain_freeze" -> serverPlayer.getInventory().add(new ItemStack(ModItems.UNLIMITED_ICE_CREAM.get()));
+            case "infinite_xp_no_anvils" -> serverPlayer.setExperienceLevels(1000000000);
+        }
+        reapplyPersistentEffect(player, effectId);
+    }
+
+    public static void reapplyPersistentEffect(Player player, String effectId) {
+        var serverPlayer = getServerPlayer(player);
+        if (serverPlayer == null) return;
+
         Set<String> playerEffects = getActiveEffects(player);
         if (playerEffects.contains(effectId)) return;
         playerEffects.add(effectId);
 
-        if (player instanceof ServerPlayer serverPlayer) {
-            // --- ADD THIS BLOCK ---
-            if ("stacked_logs".equals(effectId)) {
-                PacketDistributor.sendToPlayer(serverPlayer, new PacketSyncStackedLogsStatus(true));
-            }
+        if ("stacked_logs".equals(effectId)) {
+            PacketDistributor.sendToPlayer(serverPlayer, new PacketSyncStackedLogsStatus(true));
+        }
 
-            AttributeInstance maxHealth = serverPlayer.getAttribute(Attributes.MAX_HEALTH);
-            if (maxHealth != null) {
-                if ("insta_heal".equals(effectId)) {
-                    maxHealth.addPermanentModifier(new AttributeModifier(INSTA_HEAL_HEALTH_MODIFIER_ID, -14.0, AttributeModifier.Operation.ADD_VALUE));
-                } else if ("extra_hearts".equals(effectId)) {
-                    maxHealth.addPermanentModifier(new AttributeModifier(EXTRA_HEARTS_HEALTH_MODIFIER_ID, 20.0, AttributeModifier.Operation.ADD_VALUE));
-                }
+        AttributeInstance maxHealth = serverPlayer.getAttribute(Attributes.MAX_HEALTH);
+        if (maxHealth != null) {
+            if ("insta_heal".equals(effectId)) {
+                maxHealth.removeModifier(INSTA_HEAL_HEALTH_MODIFIER_ID);
+                maxHealth.addPermanentModifier(new AttributeModifier(INSTA_HEAL_HEALTH_MODIFIER_ID, -14.0, AttributeModifier.Operation.ADD_VALUE));
+            } else if ("extra_hearts".equals(effectId)) {
+                maxHealth.removeModifier(EXTRA_HEARTS_HEALTH_MODIFIER_ID);
+                maxHealth.addPermanentModifier(new AttributeModifier(EXTRA_HEARTS_HEALTH_MODIFIER_ID, 20.0, AttributeModifier.Operation.ADD_VALUE));
             }
-            if ("creative_flight".equals(effectId)) {
-                serverPlayer.getAbilities().mayfly = true;
-                serverPlayer.onUpdateAbilities();
-            }
-            if ("strength_ii".equals(effectId)) {
-                serverPlayer.getServer().getRecipeManager().byKey(ResourceLocation.withDefaultNamespace("shield"))
-                        .ifPresent(recipe -> serverPlayer.resetRecipes(List.of(recipe)));
-            }
+        }
+        if ("creative_flight".equals(effectId)) {
+            serverPlayer.getAbilities().mayfly = true;
+            serverPlayer.onUpdateAbilities();
+        }
+        if ("keep_inventory_berries_only".equals(effectId)) {
+            player.level().getGameRules().getRule(GameRules.RULE_KEEPINVENTORY).set(true, player.getServer());
         }
     }
 
     public static void removeEffect(Player player, String effectId) {
         getActiveEffects(player).remove(effectId);
+        ServerPlayer serverPlayer = getServerPlayer(player);
+        if (serverPlayer == null) return;
 
-        if (player instanceof ServerPlayer serverPlayer) {
-            switch (effectId) {
-                case "insta_heal":
-                case "extra_hearts":
-                    AttributeInstance maxHealth = serverPlayer.getAttribute(Attributes.MAX_HEALTH);
-                    if (maxHealth != null) {
-                        maxHealth.removeModifier(INSTA_HEAL_HEALTH_MODIFIER_ID);
-                        maxHealth.removeModifier(EXTRA_HEARTS_HEALTH_MODIFIER_ID);
-                    }
-                    if (serverPlayer.getHealth() > serverPlayer.getMaxHealth()) {
-                        serverPlayer.setHealth(serverPlayer.getMaxHealth());
-                    }
-                    break;
-                case "creative_flight":
-                    if (!serverPlayer.isCreative()) {
-                        serverPlayer.getAbilities().mayfly = false;
-                        serverPlayer.getAbilities().flying = false;
-                        serverPlayer.onUpdateAbilities();
-                    }
-                    break;
-                case "strength_ii":
-                    serverPlayer.getServer().getRecipeManager().byKey(ResourceLocation.withDefaultNamespace("shield"))
-                            .ifPresent(recipe -> serverPlayer.awardRecipes(List.of(recipe)));
-                    break;
-            }
+        switch (effectId) {
+            case "insta_heal":
+            case "extra_hearts":
+                AttributeInstance maxHealth = serverPlayer.getAttribute(Attributes.MAX_HEALTH);
+                if (maxHealth != null) {
+                    maxHealth.removeModifier(INSTA_HEAL_HEALTH_MODIFIER_ID);
+                    maxHealth.removeModifier(EXTRA_HEARTS_HEALTH_MODIFIER_ID);
+                }
+                if (serverPlayer.getHealth() > serverPlayer.getMaxHealth()) {
+                    serverPlayer.setHealth(serverPlayer.getMaxHealth());
+                }
+                break;
+            case "creative_flight":
+                if (!serverPlayer.isCreative()) {
+                    serverPlayer.getAbilities().mayfly = false;
+                    serverPlayer.getAbilities().flying = false;
+                    serverPlayer.onUpdateAbilities();
+                }
+                break;
+            case "golem_suit_slow":
+                AttributeInstance health = serverPlayer.getAttribute(Attributes.MAX_HEALTH);
+                if (health != null) health.removeModifier(GOLEM_HEALTH_MODIFIER_ID);
+                AttributeInstance strength = serverPlayer.getAttribute(Attributes.ATTACK_DAMAGE);
+                if (strength != null) strength.removeModifier(GOLEM_STRENGTH_MODIFIER_ID);
+                AttributeInstance speed = serverPlayer.getAttribute(Attributes.MOVEMENT_SPEED);
+                if (speed != null) speed.removeModifier(GOLEM_SPEED_MODIFIER_ID);
+                break;
         }
     }
 
-    public static void clearAllEffects(Player player) {
+    public static void clearActiveEffects(Player player) {
         UUID playerUUID = player.getUUID();
-        Set<String> playerEffects = getActiveEffects(player);
-
-        // --- ADD THIS BLOCK ---
-        if (player instanceof ServerPlayer serverPlayer && playerEffects.contains("stacked_logs")) {
-            PacketDistributor.sendToPlayer(serverPlayer, new PacketSyncStackedLogsStatus(false));
-        }
-
-        if (player instanceof ServerPlayer serverPlayer) {
-            PlayerChoiceTracker.clearChoices(serverPlayer);
-        }
-
         activeEffects.remove(playerUUID);
         playerTickCounters.remove(playerUUID);
         teleportCooldowns.remove(playerUUID);
-        fishCatchCount.remove(playerUUID);
         dailyDiamondCooldown.remove(playerUUID);
+        respawnLocations.remove(playerUUID);
+        respawnDimensions.remove(playerUUID);
+        fastHorses.remove(playerUUID);
+        tamedMonsters.remove(playerUUID);
+        randomSoundTimers.remove(playerUUID);
+        spawnBiomes.remove(playerUUID);
 
-        if (player instanceof ServerPlayer serverPlayer) {
+        ServerPlayer serverPlayer = getServerPlayer(player);
+        if (serverPlayer != null) {
             AttributeInstance maxHealth = serverPlayer.getAttribute(Attributes.MAX_HEALTH);
             if (maxHealth != null) {
                 maxHealth.removeModifier(INSTA_HEAL_HEALTH_MODIFIER_ID);
                 maxHealth.removeModifier(EXTRA_HEARTS_HEALTH_MODIFIER_ID);
+                maxHealth.removeModifier(GOLEM_HEALTH_MODIFIER_ID);
             }
+            AttributeInstance strength = serverPlayer.getAttribute(Attributes.ATTACK_DAMAGE);
+            if (strength != null) strength.removeModifier(GOLEM_STRENGTH_MODIFIER_ID);
+            AttributeInstance speed = serverPlayer.getAttribute(Attributes.MOVEMENT_SPEED);
+            if (speed != null) speed.removeModifier(GOLEM_SPEED_MODIFIER_ID);
+
             if (serverPlayer.getHealth() > serverPlayer.getMaxHealth()) {
                 serverPlayer.setHealth(serverPlayer.getMaxHealth());
             }
@@ -179,227 +323,317 @@ public class ChoiceEffects {
                 serverPlayer.getAbilities().flying = false;
                 serverPlayer.onUpdateAbilities();
             }
-            if (playerEffects.contains("strength_ii")) {
-                serverPlayer.getServer().getRecipeManager().byKey(ResourceLocation.withDefaultNamespace("shield"))
-                        .ifPresent(recipe -> serverPlayer.awardRecipes(List.of(recipe)));
+        }
+    }
+
+    public static void clearAllEffects(Player player) {
+        if (hasEffect(player, "keep_inventory_berries_only") && player.getServer() != null) {
+            boolean anotherPlayerHasEffect = false;
+            for (ServerPlayer p : player.getServer().getPlayerList().getPlayers()) {
+                if (!p.getUUID().equals(player.getUUID()) && hasEffect(p, "keep_inventory_berries_only")) {
+                    anotherPlayerHasEffect = true;
+                    break;
+                }
+            }
+            if (!anotherPlayerHasEffect) {
+                player.level().getGameRules().getRule(GameRules.RULE_KEEPINVENTORY).set(false, player.getServer());
+            }
+        }
+
+        ServerPlayer serverPlayer = getServerPlayer(player);
+        if (serverPlayer != null) {
+            if(getActiveEffects(player).contains("stacked_logs")) {
+                PacketDistributor.sendToPlayer(serverPlayer, new PacketSyncStackedLogsStatus(false));
+            }
+            PlayerChoiceTracker.clearChoices(serverPlayer);
+        }
+        clearActiveEffects(player);
+    }
+
+    // --- EVENT HANDLERS ---
+
+    @SubscribeEvent
+    public void onPlayerLeave(PlayerEvent.PlayerLoggedOutEvent event) {
+        clearActiveEffects(event.getEntity());
+    }
+
+    @SubscribeEvent
+    public void onServerStarting(ServerStartingEvent event) {
+        activeEffects.clear();
+        playerTickCounters.clear();
+        teleportCooldowns.clear();
+        dailyDiamondCooldown.clear();
+        respawnLocations.clear();
+        respawnDimensions.clear();
+        fastHorses.clear();
+        tamedMonsters.clear();
+        randomSoundTimers.clear();
+        spawnBiomes.clear();
+    }
+
+    @SubscribeEvent
+    public void onServerTick(ServerTickEvent.Post event) {
+        if (event.getServer() == null) return;
+        long currentTime = event.getServer().overworld().getGameTime();
+        WyrSavedData savedData = WyrSavedData.get(event.getServer().overworld());
+
+        for (ServerPlayer player : event.getServer().getPlayerList().getPlayers()) {
+            int interval = savedData.getPlayerPromptInterval(player.getUUID());
+            if (interval > 0 && PlayerChoiceTracker.getPromptCount(player) < 20 && !PlayerChoiceTracker.isPromptPending(player)) {
+                long nextPromptTime = savedData.getNextPromptTime(player.getUUID());
+                if (currentTime >= nextPromptTime) {
+                    List<Choice> newChoices = ChoiceRegistry.getFilteredRandomChoicesForPlayer(player);
+                    if (!newChoices.isEmpty()) {
+                        PlayerChoiceTracker.setPromptPending(player, true);
+                        PacketDistributor.sendToPlayer(player, new PacketSyncNewChoices(newChoices));
+                    }
+                    savedData.setNextPromptTime(player.getUUID(), currentTime + interval);
+                    player.serverLevel().getDataStorage().save();
+                }
+            }
+
+            if(hasEffect(player, "fast_smelt_damage")) {
+                if (player.tickCount % 5 == 0) {
+                    BlockPos.betweenClosedStream(player.blockPosition().offset(-8, -8, -8), player.blockPosition().offset(8, 8, 8))
+                            .forEach(pos -> {
+                                BlockEntity be = player.level().getBlockEntity(pos);
+                                if (be instanceof AbstractFurnaceBlockEntity furnace) {
+                                    // This is a simplified way to speed up smelting. A full implementation is more complex.
+                                    int cookingProgress = furnace.getPersistentData().getInt("CookingProgress");
+                                    int totalTime = furnace.getPersistentData().getInt("CookingTotalTime");
+                                    if (totalTime > 0 && cookingProgress < totalTime) {
+                                        furnace.getPersistentData().putInt("CookingProgress", Math.min(totalTime, cookingProgress + 4));
+                                        if(furnace.getPersistentData().getInt("CookingProgress") >= totalTime) {
+                                            player.hurt(player.damageSources().magic(), player.getMaxHealth() / 2);
+                                        }
+                                    }
+                                }
+                            });
+                }
             }
         }
     }
 
     @SubscribeEvent
-    public void onPlayerLeave(PlayerEvent.PlayerLoggedOutEvent event) {
-        UUID playerUUID = event.getEntity().getUUID();
-        activeEffects.remove(playerUUID);
-        playerTickCounters.remove(playerUUID);
-        teleportCooldowns.remove(playerUUID);
-        fishCatchCount.remove(playerUUID);
-        dailyDiamondCooldown.remove(playerUUID);
-    }
-
-    @SubscribeEvent
     public void onPlayerTick(PlayerTickEvent.Post event) {
-        if (event.getEntity() instanceof ServerPlayer player) {
-            if (player.level().isClientSide()) return;
+        if (event.getEntity().level().isClientSide) return;
+        if (!(event.getEntity() instanceof ServerPlayer player)) return;
 
-            Set<String> playerEffects = getActiveEffects(player);
-            if (playerEffects.isEmpty()) return;
+        boolean hasSoundEffect = hasEffect(player, "emeralds_from_mobs_siren") || hasEffect(player, "instant_tame_creeper_hiss") || hasEffect(player, "auto_smelt_random_sound");
+        if (hasSoundEffect) {
+            int timer = randomSoundTimers.getOrDefault(player.getUUID(), -1);
+            if (timer == -1) {
+                timer = 20 * 30;
+                randomSoundTimers.put(player.getUUID(), timer);
+            }
+            timer--;
+            if (timer <= 0) {
+                DeferredHolder<SoundEvent, SoundEvent> soundToPlay = null;
+                float volume = 1.0F, pitch = 1.0F;
+                if (hasEffect(player, "emeralds_from_mobs_siren")) {
+                    soundToPlay = ModSounds.EMERALDS_SIREN;
+                    volume = 10.0F;
+                } else if (hasEffect(player, "instant_tame_creeper_hiss")) {
+                    soundToPlay = ModSounds.creeper_hiss;
+                    volume = 0.8F;
+                } else if (hasEffect(player, "auto_smelt_random_sound")) {
+                    soundToPlay = ModSounds.auto_smelt_knock;
+                    volume = 1.5F;
+                }
+                if (soundToPlay != null) PacketDistributor.sendToPlayer(player, new PacketPlayCustomSound(soundToPlay.getId(), volume, pitch));
+                timer = player.getRandom().nextInt(20 * 60) + (20*30); // Random interval between 30s and 1.5m
+            }
+            randomSoundTimers.put(player.getUUID(), timer);
+        }
 
-            if (hasEffect(player, "daily_diamond")) {
-                long currentTime = player.level().getGameTime();
-                long lastTime = dailyDiamondCooldown.getOrDefault(player.getUUID(), 0L);
-                if (currentTime > lastTime) {
-                    if (player.level().getDayTime() % 24000 < 100) {
-                        player.getInventory().add(new ItemStack(Items.DIAMOND_BLOCK));
-                        dailyDiamondCooldown.put(player.getUUID(), currentTime + 23000);
-                    }
+        Set<String> playerEffects = getActiveEffects(player);
+        if (playerEffects.isEmpty()) return;
+
+        // Permanent Potion Effects
+        if (hasEffect(player, "speed_iv")) player.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SPEED, 2, 3, true, false));
+        if (hasEffect(player, "haste_ii")) player.addEffect(new MobEffectInstance(MobEffects.DIG_SPEED, 2, 1, true, false));
+        if (hasEffect(player, "high_jump")) player.addEffect(new MobEffectInstance(MobEffects.JUMP, 2, 4, true, false));
+        if (hasEffect(player, "water_breathing")) player.addEffect(new MobEffectInstance(MobEffects.WATER_BREATHING, 2, 0, true, false));
+        if (hasEffect(player, "night_vision")) player.addEffect(new MobEffectInstance(MobEffects.NIGHT_VISION, 400, 0, true, false));
+        if (hasEffect(player, "dolphin_grace")) player.addEffect(new MobEffectInstance(MobEffects.DOLPHINS_GRACE, 2, 0, true, false));
+        if (hasEffect(player, "resistance_ii")) player.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, 2, 1, true, false));
+        if (hasEffect(player, "strength_ii")) player.addEffect(new MobEffectInstance(MobEffects.DAMAGE_BOOST, 2, 1, true, false));
+
+        // Tick-based logic
+        int ticks = playerTickCounters.getOrDefault(player.getUUID(), 0);
+
+        if (hasEffect(player, "mob_loot_inventory_slots")) {
+            for (int i = 9; i < 36; i++) { // Only check main inventory, not hotbar
+                ItemStack stackInSlot = player.getInventory().getItem(i);
+                if (!stackInSlot.isEmpty()) {
+                    player.getInventory().setItem(i, ItemStack.EMPTY);
+                    player.drop(stackInSlot, true, false);
                 }
             }
-
-            if (hasEffect(player, "daily_diamond")) {
-                WyrSavedData savedData = WyrSavedData.get((ServerLevel) player.level());
-                int currentThirst = savedData.getPlayerThirst(player.getUUID());
-                float currentExhaustion = savedData.getPlayerThirstExhaustion(player.getUUID());
-
-                if (currentExhaustion > 4.0F) {
-                    currentExhaustion -= 4.0F;
-                    if (currentThirst > 0) {
-                        savedData.setPlayerThirst(player.getUUID(), currentThirst - 1);
+        }
+        if (hasEffect(player, "give_decoration_blind") && player.level().isDay() && player.level().canSeeSky(player.blockPosition())) {
+            player.addEffect(new MobEffectInstance(MobEffects.BLINDNESS, 40, 0, true, false));
+        }
+        if (hasEffect(player, "choose_spawn_biome_lock")) {
+            ResourceKey<net.minecraft.world.level.biome.Biome> spawnBiome = spawnBiomes.get(player.getUUID());
+            if (spawnBiome != null && player.level().getDayTime() < (10 * 24000)) {
+                player.level().getBiome(player.blockPosition()).unwrapKey().ifPresent(currentBiome -> {
+                    if (currentBiome != spawnBiome) {
+                        BlockPos spawn = player.getRespawnPosition();
+                        if (spawn != null) {
+                            player.teleportTo(spawn.getX(), spawn.getY(), spawn.getZ());
+                            player.sendSystemMessage(Component.literal("You cannot leave your spawn biome yet!"));
+                        }
                     }
-                }
-
-                if (currentThirst <= 0 && player.tickCount % 80 == 0) {
-                    player.hurt(player.damageSources().starve(), 1.0F);
-                }
-
-                if (player.tickCount % 20 == 0) {
-                    PacketDistributor.sendToPlayer(player, new PacketSyncThirst(currentThirst));
-                }
-                savedData.setPlayerThirstExhaustion(player.getUUID(), currentExhaustion);
+                });
             }
+        }
+        if (hasEffect(player, "stack_64_world_height")) {
+            for (int i = 0; i < player.getInventory().getContainerSize(); i++) {
+                ItemStack stack = player.getInventory().getItem(i);
+                if (!stack.isEmpty() && stack.isStackable() && stack.getCount() < Math.min(64, stack.getMaxStackSize())) {
+                    stack.setCount(Math.min(64, stack.getMaxStackSize()));
+                }
+            }
+        }
+        if (hasEffect(player, "fast_climb_short") && player.onClimbable()) {
+            Vec3 motion = player.getDeltaMovement();
+            if (motion.y < 0.2) {
+                player.setDeltaMovement(motion.x, 0.2, motion.z);
+            }
+        }
+
+        if (ticks % 200 == 0) { // Every 10 seconds
+            if (hasEffect(player, "passive_xp_no_mending")) player.giveExperiencePoints(7);
+        }
+        if (ticks % 600 == 0) { // Every 30 seconds
+            if (hasEffect(player, "wind_charge_respawn_mob")) player.getInventory().add(new ItemStack(Items.WIND_CHARGE));
+        }
+        if (ticks % 1200 == 0) { // Every 1 minute
+            if (hasEffect(player, "random_food_no_jump")) {
+                List<Item> foods = BuiltInRegistries.ITEM.stream().filter(item -> item.components().has(DataComponents.FOOD)).toList();
+                if (!foods.isEmpty()) player.getInventory().add(new ItemStack(foods.get(player.getRandom().nextInt(foods.size()))));
+            }
+        }
+        playerTickCounters.put(player.getUUID(), ticks + 1);
+
+        // Negative Consequences & Other Logic
+        if (hasEffect(player, "speed_iv")) player.getFoodData().addExhaustion(0.015f * 3);
+        if (hasEffect(player, "water_breathing") && !player.getItemBySlot(EquipmentSlot.HEAD).isEmpty()) player.drop(player.getInventory().armor.set(3, ItemStack.EMPTY), true);
+        if (hasEffect(player, "extra_hearts") && !player.getItemBySlot(EquipmentSlot.CHEST).isEmpty()) player.drop(player.getInventory().armor.set(2, ItemStack.EMPTY), true);
+        if (hasEffect(player, "triple_damage") && !player.getItemBySlot(EquipmentSlot.FEET).isEmpty()) player.drop(player.getInventory().armor.set(0, ItemStack.EMPTY), true);
+        if (hasEffect(player, "resistance_ii") && player.isSprinting()) player.setSprinting(false);
+        if (hasEffect(player, "dolphin_grace") && !player.isInWater() && !player.isCreative()) player.hurt(player.damageSources().drown(), 1.0f);
+        if (hasEffect(player, "fast_horse_dark_fear") && player.level().isNight()) {
+            Horse horse = fastHorses.get(player.getUUID());
+            if (horse != null && !horse.isLeashed()) {
+                horse.getNavigation().stop();
+                horse.setDeltaMovement(0, horse.getDeltaMovement().y, 0);
+            }
+        }
+        if (hasEffect(player, "cheap_trades_sink_boats") && player.getVehicle() instanceof Boat boat) {
+            boat.setDeltaMovement(boat.getDeltaMovement().add(0, -0.02, 0));
+            ((ServerLevel)player.level()).sendParticles(ParticleTypes.BUBBLE, boat.getX(), boat.getY() + 0.5, boat.getZ(), 5, 0.3, 0.3, 0.3, 0.0);
+        }
+        if (hasEffect(player, "no_hunger_random_shader") || hasEffect(player, "infinite_sprint_no_elytra")) {
+            if (player.getFoodData().needsFood()) player.getFoodData().setFoodLevel(20);
+        }
+        if (hasEffect(player, "creative_flight") && player.getAbilities().flying) {
+            if (ticks % 200 == 0) {
+                List<ItemStack> inventory = new ArrayList<>(player.getInventory().items);
+                inventory.removeIf(ItemStack::isEmpty);
+                if (!inventory.isEmpty()) inventory.get(player.getRandom().nextInt(inventory.size())).setCount(0);
+            }
+        }
+        if (hasEffect(player, "daily_diamond")) {
+            long currentTime = player.level().getGameTime();
+            long lastTime = dailyDiamondCooldown.getOrDefault(player.getUUID(), 0L);
+            if (currentTime > lastTime && player.level().getDayTime() % 24000 < 100) {
+                player.getInventory().add(new ItemStack(Items.DIAMOND_BLOCK));
+                dailyDiamondCooldown.put(player.getUUID(), currentTime + 23000);
+            }
+            WyrSavedData savedData = WyrSavedData.get((ServerLevel) player.level());
+            int currentThirst = savedData.getPlayerThirst(player.getUUID());
+            float currentExhaustion = savedData.getPlayerThirstExhaustion(player.getUUID());
+            if (currentExhaustion > 4.0F) {
+                currentExhaustion -= 4.0F;
+                if (currentThirst > 0) savedData.setPlayerThirst(player.getUUID(), currentThirst - 1);
+            }
+            if (currentThirst <= 0 && player.tickCount % 80 == 0) player.hurt(player.damageSources().starve(), 1.0F);
+            if (player.tickCount % 20 == 0) PacketDistributor.sendToPlayer(player, new PacketSyncThirst(currentThirst));
+            savedData.setPlayerThirstExhaustion(player.getUUID(), currentExhaustion);
+        }
+        if (hasEffect(player, "no_durability_loss_adventure_mode")) {
+            if (player.level().isNight() && player.gameMode.getGameModeForPlayer() != GameType.ADVENTURE) player.setGameMode(GameType.ADVENTURE);
+            else if (player.level().isDay() && player.gameMode.getGameModeForPlayer() != GameType.SURVIVAL) player.setGameMode(GameType.SURVIVAL);
+        }
+        if (hasEffect(player, "daily_totem_no_armor") && player.level().isDay() && player.level().getDayTime() % 24000 < 100 && ticks % 24000 > 100) {
+            if (player.getOffhandItem().isEmpty()) player.getInventory().offhand.set(0, new ItemStack(Items.TOTEM_OF_UNDYING));
         }
     }
 
     @SubscribeEvent
     public void onPlayerTick(PlayerTickEvent.Pre event) {
         Player player = event.getEntity();
+        if (player.level().isClientSide) return;
         Set<String> playerEffects = getActiveEffects(player);
         if (playerEffects.isEmpty()) return;
-        int ticks = playerTickCounters.getOrDefault(player.getUUID(), 0);
-
         for (String effectId : playerEffects) {
             switch (effectId) {
-                case "phasing":
-                    break;
-                case "creative_flight":
-                    if (player.fallDistance > 0 && !player.getAbilities().flying) {
-                        player.getAbilities().mayfly = false;
-                    } else {
-                        player.getAbilities().mayfly = true;
-                    }
-                    player.onUpdateAbilities();
-                    if (player.getAbilities().flying) {
-                        if (ticks % 200 == 0 && ticks != 0) {
-                            List<ItemStack> allItems = new ArrayList<>();
-                            allItems.addAll(player.getInventory().items);
-                            allItems.addAll(player.getInventory().armor);
-                            allItems.addAll(player.getInventory().offhand);
-                            List<ItemStack> possibleItemsToDelete = allItems.stream()
-                                    .filter(stack -> !stack.isEmpty())
-                                    .toList();
-                            if (!possibleItemsToDelete.isEmpty()) {
-                                ItemStack stackToRemoveFrom = possibleItemsToDelete.get(player.getRandom().nextInt(possibleItemsToDelete.size()));
-                                stackToRemoveFrom.shrink(1);
-                                player.getInventory().setChanged();
-                            }
-                        }
-                    }
-                    break;
-                case "speed_iv":
-                    player.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SPEED, 2, 3, true, false));
-                    if (player.getFoodData().getFoodLevel() > 0) {
-                        player.getFoodData().addExhaustion(0.015f * 3);
-                    }
-                    break;
-                case "water_breathing":
-                    player.addEffect(new MobEffectInstance(MobEffects.WATER_BREATHING, 2, 0, true, false));
-                    if (!player.getInventory().getArmor(3).isEmpty()) {
-                        player.getInventory().add(player.getInventory().armor.set(3, ItemStack.EMPTY));
-                    }
-                    break;
-                case "haste_ii":
-                    player.addEffect(new MobEffectInstance(MobEffects.DIG_SPEED, 2, 1, true, false));
-                    break;
-                case "high_jump":
-                    player.addEffect(new MobEffectInstance(MobEffects.JUMP, 2, 3, true, false));
-                    break;
-                case "strength_ii":
-                    player.addEffect(new MobEffectInstance(MobEffects.DAMAGE_BOOST, 2, 1, true, false));
-                    for (int i = 0; i < player.getInventory().items.size(); i++) {
-                        ItemStack stack = player.getInventory().items.get(i);
-                        if (stack.getItem() instanceof ShieldItem) {
-                            ItemStack toDrop = stack.copy();
-                            player.getInventory().items.set(i, ItemStack.EMPTY);
-                            player.drop(toDrop, true);
-                        }
-                    }
-                    ItemStack offhandStack = player.getOffhandItem();
-                    if (offhandStack.getItem() instanceof ShieldItem) {
-                        player.getInventory().offhand.set(0, ItemStack.EMPTY);
-                        player.drop(offhandStack.copy(), true);
-                    }
-                    if (player.containerMenu.getCarried().getItem() instanceof ShieldItem) {
-                        ItemStack carriedStack = player.containerMenu.getCarried().copy();
-                        player.containerMenu.setCarried(ItemStack.EMPTY);
-                        player.drop(carriedStack, true);
-                    }
-                    break;
-                case "night_vision":
-                    player.addEffect(new MobEffectInstance(MobEffects.NIGHT_VISION, 220, 0, true, false));
-                    if (ticks % 20 == 0) {
-                        player.level().getEntitiesOfClass(EnderMan.class, player.getBoundingBox().inflate(32)).stream()
-                                .filter(enderman -> enderman.getTarget() == null)
-                                .forEach(enderman -> enderman.setTarget(player));
-                    }
-                    break;
-                case "extra_hearts":
-                    if (!player.getInventory().getArmor(2).isEmpty()) {
-                        player.getInventory().add(player.getInventory().armor.set(2, ItemStack.EMPTY));
-                    }
-                    break;
+                case "golem_suit_slow": handleGolemSet(player); break;
                 case "water_walk":
-                    player.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SLOWDOWN, 2, 0, true, false));
-                    if (player.getAbilities().flying || player.getDeltaMovement().y > 0.0D) {
-                        break;
-                    }
-                    AABB box = player.getBoundingBox();
-                    BlockPos corner1 = BlockPos.containing(box.minX, box.minY - 0.5D, box.minZ);
-                    BlockPos corner2 = BlockPos.containing(box.maxX, box.minY, box.maxZ);
-                    double highestFluidSurface = Double.NEGATIVE_INFINITY;
-                    boolean foundFluid = false;
-                    for (BlockPos pos : BlockPos.betweenClosed(corner1, corner2)) {
-                        FluidState fluidState = player.level().getFluidState(pos);
-                        if (!fluidState.isEmpty()) {
-                            foundFluid = true;
-                            double surfaceY = (double) pos.getY() + fluidState.getHeight(player.level(), pos);
-                            if (surfaceY > highestFluidSurface) {
-                                highestFluidSurface = surfaceY;
-                            }
+                    if (!player.isCrouching()) {
+                        BlockPos playerPos = player.blockPosition();
+                        BlockState state = player.level().getBlockState(playerPos.below());
+                        if (state.is(Blocks.WATER) || state.is(Blocks.LAVA)) {
+                            Vec3 motion = player.getDeltaMovement();
+                            player.setDeltaMovement(motion.x, 0.0, motion.z);
+                            player.setOnGround(true);
                         }
                     }
-                    if (foundFluid) {
-                        Vec3 motion = player.getDeltaMovement();
-                        if (box.minY <= highestFluidSurface && motion.y <= 0) {
-                            player.setPos(player.getX(), highestFluidSurface, player.getZ());
-                            if (player.isCrouching()) {
-                                player.setOnGround(false);
-                                if (player.zza == 0.0F && player.xxa == 0.0F) {
-                                    player.setDeltaMovement(motion.x() * 0.7D, 0.0D, motion.z() * 0.7D);
-                                } else {
-                                    player.setDeltaMovement(motion.x(), 0.0D, motion.z());
-                                }
-                            } else {
-                                player.setDeltaMovement(motion.with(Direction.Axis.Y, 0.0D));
-                                player.setOnGround(true);
-                            }
-                        }
-                    }
-                    break;
-                case "dolphin_grace":
-                    if (player.isInWater()) {
-                        player.addEffect(new MobEffectInstance(MobEffects.DOLPHINS_GRACE, 2, 0, true, false));
-                    } else if (!player.isCreative() && !player.isSpectator() && ticks % 20 == 0) {
-                        player.hurt(player.damageSources().drown(), 2.0F);
-                    }
+                    player.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SLOWDOWN, 2, 1, true, false));
                     break;
                 case "wall_climb":
-                    if (player.horizontalCollision) {
+                    if(player.horizontalCollision && !player.getAbilities().flying) {
                         Vec3 motion = player.getDeltaMovement();
-                        if (motion.y() > 0) {
-                            player.setDeltaMovement(motion.x(), 0.2D, motion.z());
-                        } else {
-                            double newY = -0.15;
-                            if (player.isCrouching()) {
-                                newY = -0.3;
-                            }
-                            player.setDeltaMovement(motion.x(), newY, motion.z());
-                        }
+                        player.setDeltaMovement(motion.x, 0.2, motion.z);
                     }
                     break;
-                case "triple_damage":
-                    if (!player.getInventory().getArmor(0).isEmpty()) {
-                        player.getInventory().add(player.getInventory().armor.set(0, ItemStack.EMPTY));
+                case "midas_touch_no_hp_bar":
+                    BlockPos below = player.blockPosition().below();
+                    if (player.onGround() && !player.level().getBlockState(below).is(Blocks.GOLD_BLOCK)) {
+                        player.level().setBlock(below, Blocks.GOLD_BLOCK.defaultBlockState(), 3);
                     }
                     break;
-                case "resistance_ii":
-                    player.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, 2, 1, true, false));
-                    if (player.isSprinting()) {
-                        player.setSprinting(false);
+                case "double_debris_vampire":
+                    if (player.level().isDay() && player.level().canSeeSky(player.blockPosition()) && !player.isCreative()) {
+                        player.igniteForSeconds(2);
                     }
                     break;
+                case "fast_day_slow_night":
+                    if (player.level().isDay()) player.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SPEED, 2, 3, true, false));
+                    else player.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SLOWDOWN, 2, 255, true, false));
+                    break;
+                case "fast_night_slow_day":
+                    if (player.level().isNight()) player.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SPEED, 2, 3, true, false));
+                    else player.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SLOWDOWN, 2, 255, true, false));
+                    break;
+                case "speed_v_random_keys": player.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SPEED, 2, 4, true, false)); break;
+                case "hero_of_village_random_sounds": player.addEffect(new MobEffectInstance(MobEffects.HERO_OF_THE_VILLAGE, 2, 0, true, false)); break;
+                case "slow_fall_side_place_only": player.addEffect(new MobEffectInstance(MobEffects.SLOW_FALLING, 2, 0, true, false)); break;
+                case "sneak_invisible_no_move":
+                    if (player.isCrouching()) {
+                        player.addEffect(new MobEffectInstance(MobEffects.INVISIBILITY, 2, 0, true, false));
+                        player.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SLOWDOWN, 2, 255, true, false));
+                    }
+                    break;
+                case "fast_swim_muted":
+                    if (player.isInWater()) player.addEffect(new MobEffectInstance(MobEffects.DOLPHINS_GRACE, 2, 1, true, false));
+                    break;
+                case "no_fall_damage_sneak_speed": player.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SLOWDOWN, 2, 0, true, false)); break;
+                case "infinite_sprint_no_elytra": player.setSprinting(true); break;
             }
         }
-        playerTickCounters.put(player.getUUID(), ticks + 1);
-
         if (hasEffect(player, "stacked_logs")) {
             for (ItemStack stack : player.getInventory().items) {
                 if (stack.getItem() instanceof AxeItem) {
@@ -416,81 +650,85 @@ public class ChoiceEffects {
 
     @SubscribeEvent
     public void onBlockBreak(BlockEvent.BreakEvent event) {
+        Player player = event.getPlayer();
+        if (player.level().isClientSide) return;
+        ServerPlayer serverPlayer = getServerPlayer(player);
+        if (serverPlayer == null) return;
 
-        if (event.getPlayer() instanceof ServerPlayer player && hasEffect(player, "stacked_logs")) {
+        if (hasEffect(player, "sleep_heal_random_drops")) {
+            List<Item> allItems = BuiltInRegistries.ITEM.stream().toList();
+            if (!allItems.isEmpty()) {
+                Item randomItem = allItems.get(player.getRandom().nextInt(allItems.size()));
+                event.setCanceled(true);
+                player.level().setBlock(event.getPos(), Blocks.AIR.defaultBlockState(), 3);
+                Block.popResource((ServerLevel)player.level(), event.getPos(), new ItemStack(randomItem));
+            }
+            return;
+        }
+        if (hasEffect(player, "unbreakable_tools_cobblestone_only")) {
+            event.setCanceled(true);
+            player.level().setBlock(event.getPos(), Blocks.AIR.defaultBlockState(), 3);
+            Block.popResource((ServerLevel)player.level(), event.getPos(), new ItemStack(Items.COBBLESTONE));
+            return;
+        }
+        if(hasEffect(player, "triple_drops_slow_break")) {
+            List<ItemStack> drops = Block.getDrops(event.getState(), serverPlayer.serverLevel(), event.getPos(), null, player, player.getMainHandItem());
+            event.setCanceled(true);
+            player.level().setBlock(event.getPos(), Blocks.AIR.defaultBlockState(), 3);
+            for(ItemStack stack : drops) {
+                stack.setCount(stack.getCount() * 3);
+                Block.popResource(serverPlayer.serverLevel(), event.getPos(), stack);
+            }
+        }
+        if (hasEffect(player, "stacked_logs")) {
             if (event.getState().is(BlockTags.LOGS)) {
-
-                Optional<Holder.Reference<Enchantment>> silkTouchHolder = player.level().registryAccess()
-                        .registryOrThrow(Registries.ENCHANTMENT).getHolder(Enchantments.SILK_TOUCH);
-
-                if (silkTouchHolder.isPresent() && EnchantmentHelper.getItemEnchantmentLevel(silkTouchHolder.get(), player.getMainHandItem()) > 0) {
-                    return; // Don't apply the effect if the player is using Silk Touch
-                }
-
-                // If all checks pass, we handle the drop manually.
+                var silkTouchHolder = player.level().registryAccess().registryOrThrow(Registries.ENCHANTMENT).getHolder(Enchantments.SILK_TOUCH);
+                if (silkTouchHolder.isPresent() && EnchantmentHelper.getItemEnchantmentLevel(silkTouchHolder.get(), player.getMainHandItem()) > 0) return;
                 ItemStack logDrop = new ItemStack(event.getState().getBlock().asItem());
                 logDrop.setCount(64);
-
-                // Manually spawn the item in the world
                 Block.popResource((ServerLevel) event.getLevel(), event.getPos(), logDrop);
-
-                // Set the block to air and cancel the event to prevent default drops
                 event.getLevel().setBlock(event.getPos(), Blocks.AIR.defaultBlockState(), 3);
                 event.setCanceled(true);
             }
         }
-
-        Player player = event.getPlayer();
-        if (player.level().isClientSide()) return;
-
-        if (hasEffect(player, "sand_treasure")) {
-            if (event.getState().is(Blocks.SAND) || event.getState().is(Blocks.RED_SAND)) {
-                if (player.getRandom().nextFloat() <= 0.001) {
-                    ServerLevel serverLevel = (ServerLevel) player.level();
-                    LootTable lootTable = serverLevel.getServer().reloadableRegistries().getLootTable(BuiltInLootTables.BURIED_TREASURE);
-                    LootParams params = new LootParams.Builder(serverLevel)
-                            .withParameter(LootContextParams.ORIGIN, player.position())
-                            .withParameter(LootContextParams.THIS_ENTITY, player)
-                            .create(LootContextParamSets.CHEST);
-
-                    lootTable.getRandomItems(params).forEach(player::addItem);
-                    lootTable.getRandomItems(params).forEach(player::addItem);
+        if (hasEffect(player, "luck_ores_one_hp") && player.getHealth() <= 1.0f && isOre(event.getState())) {
+            List<ItemStack> drops = Block.getDrops(event.getState(), serverPlayer.serverLevel(), event.getPos(), null, player, player.getMainHandItem());
+            event.setCanceled(true);
+            player.level().setBlock(event.getPos(), Blocks.AIR.defaultBlockState(), 3);
+            for (ItemStack stack : drops) {
+                stack.setCount(stack.getCount() * 5);
+                Block.popResource(serverPlayer.serverLevel(), event.getPos(), stack);
+            }
+        }
+        if (hasEffect(player, "auto_smelt_random_sound") && isOre(event.getState())) {
+            List<ItemStack> drops = Block.getDrops(event.getState(), serverPlayer.serverLevel(), event.getPos(), null, player, player.getMainHandItem());
+            event.setCanceled(true);
+            player.level().setBlock(event.getPos(), Blocks.AIR.defaultBlockState(), 3);
+            for (ItemStack dropStack : drops) {
+                Optional<RecipeHolder<SmeltingRecipe>> recipe = serverPlayer.getServer().getRecipeManager().getRecipeFor(RecipeType.SMELTING, new SingleRecipeInput(dropStack), player.level());
+                if (recipe.isPresent()) {
+                    ItemStack smeltedResult = recipe.get().value().getResultItem(player.level().registryAccess()).copy();
+                    smeltedResult.setCount(dropStack.getCount());
+                    Block.popResource(serverPlayer.serverLevel(), event.getPos(), smeltedResult);
+                } else {
+                    Block.popResource(serverPlayer.serverLevel(), event.getPos(), dropStack);
                 }
             }
+            player.giveExperiencePoints(1);
+            return;
+        }
+        if (hasEffect(player, "cheap_trades_no_ore_drops") && isOre(event.getState())) {
+            event.setCanceled(true);
+            player.level().setBlock(event.getPos(), Blocks.AIR.defaultBlockState(), 3);
         }
     }
 
+    private static boolean isOre(BlockState state) {
+        return state.is(BlockTags.IRON_ORES) || state.is(BlockTags.GOLD_ORES) || state.is(BlockTags.DIAMOND_ORES) || state.is(BlockTags.EMERALD_ORES) || state.is(BlockTags.LAPIS_ORES) || state.is(BlockTags.COPPER_ORES) || state.is(BlockTags.COAL_ORES) || state.is(BlockTags.REDSTONE_ORES) || state.is(Blocks.NETHER_GOLD_ORE) || state.is(Blocks.NETHER_QUARTZ_ORE);
+    }
+
     @SubscribeEvent
-    public void onItemFished(ItemFishedEvent event) {
-        Player player = event.getEntity();
-        if (player.level().isClientSide()) return;
-
-        if (hasEffect(player, "fishing_luck")) {
-            int count = fishCatchCount.getOrDefault(player.getUUID(), 0) + 1;
-            fishCatchCount.put(player.getUUID(), count);
-
-            if (count >= 5) {
-                fishCatchCount.put(player.getUUID(), 0);
-                Guardian guardian = EntityType.GUARDIAN.create(player.level());
-                if (guardian != null && event.getHookEntity() != null) {
-                    guardian.setPos(event.getHookEntity().position());
-                    guardian.setTarget(player);
-                    player.level().addFreshEntity(guardian);
-                }
-            }
-
-            if (player.getRandom().nextFloat() <= 0.01) {
-                ServerLevel serverLevel = (ServerLevel) player.level();
-                LootTable lootTable = serverLevel.getServer().reloadableRegistries().getLootTable(BuiltInLootTables.SHIPWRECK_TREASURE);
-                LootParams params = new LootParams.Builder(serverLevel)
-                        .withParameter(LootContextParams.ORIGIN, player.position())
-                        .withParameter(LootContextParams.THIS_ENTITY, player)
-                        .create(LootContextParamSets.FISHING);
-
-                event.getDrops().addAll(lootTable.getRandomItems(params));
-                event.getDrops().addAll(lootTable.getRandomItems(params));
-            }
-        }
+    public void onBlockPlace(BlockEvent.EntityPlaceEvent event) {
     }
 
     @SubscribeEvent
@@ -498,88 +736,124 @@ public class ChoiceEffects {
         Player player = event.getEntity();
         BlockState state = player.level().getBlockState(event.getPos());
 
-        if (hasEffect(player, "triple_ores") && state.getBlock() instanceof EnchantingTableBlock) {
-            event.setCanceled(true);
+        if (hasEffect(player, "build_limit_638_top_bottom_only")) {
+            // Check if the player is holding a block to prevent canceling other right-click actions
+            if (event.getItemStack().getItem() instanceof BlockItem) {
+                Direction face = event.getFace();
+                if (face != Direction.UP && face != Direction.DOWN) {
+                    event.setCanceled(true);
+                    return; // Stop processing to prevent placing the block
+                }
+            }
         }
 
-        if (hasEffect(player, "sand_treasure")) {
-            if (state.is(Blocks.FURNACE) || state.is(Blocks.BLAST_FURNACE) || state.is(Blocks.SMOKER)) {
-                event.setCanceled(true);
+        if (hasEffect(player, "triple_ores") && state.getBlock() instanceof EnchantingTableBlock) event.setCanceled(true);
+        if (hasEffect(player, "sand_treasure") && (state.is(Blocks.FURNACE) || state.is(Blocks.BLAST_FURNACE) || state.is(Blocks.SMOKER))) event.setCanceled(true);
+        if (hasEffect(player, "phasing") && state.getBlock() instanceof DoorBlock) event.setCanceled(true);
+        if (hasEffect(player, "tame_hostiles_no_crafting") && state.is(Blocks.CRAFTING_TABLE)) event.setCanceled(true);
+        if (hasEffect(player, "creeper_cake_no_fence_gates") && state.is(BlockTags.FENCE_GATES)) event.setCanceled(true);
+        if (hasEffect(player, "no_phantoms_no_beds") && state.is(BlockTags.BEDS)) event.setCanceled(true);
+        if (hasEffect(player, "extra_slots_no_shulkers") && state.getBlock() instanceof ShulkerBoxBlock) event.setCanceled(true);
+        if (hasEffect(player, "infinite_xp_no_anvils") && (state.is(BlockTags.ANVIL) || state.is(Blocks.ENCHANTING_TABLE))) event.setCanceled(true);
+        if (hasEffect(player, "nether_water_fast_lava") && player.level().dimension() == Level.NETHER && event.getItemStack().is(Items.WATER_BUCKET)) {
+            if(!player.isCreative()) {
+                event.getItemStack().shrink(1);
+                player.getInventory().add(new ItemStack(Items.BUCKET));
             }
-        }
-        if (hasEffect(player, "phasing")) {
-            if (state.getBlock() instanceof DoorBlock) {
-                event.setCanceled(true);
-            }
+            player.level().setBlock(event.getPos().relative(event.getFace()), Blocks.WATER.defaultBlockState(), 3);
+            event.setCanceled(true);
         }
     }
 
     @SubscribeEvent
     public void onAnvilUpdate(AnvilUpdateEvent event) {
-        if (hasEffect(event.getPlayer(), "triple_ores")) {
-            if (event.getRight().getItem() instanceof EnchantedBookItem) {
-                event.setCanceled(true);
+        Player player = event.getPlayer();
+        if (hasEffect(player, "triple_ores")) {
+            if (event.getRight().getItem() instanceof EnchantedBookItem) event.setCanceled(true);
+        }
+        if (hasEffect(player, "mace_max_damage_weak") && event.getLeft().is(Items.MACE)) event.setCanceled(true);
+        if (hasEffect(player, "passive_xp_no_mending")) {
+            var enchantments = EnchantmentHelper.getEnchantmentsForCrafting(event.getRight());
+            if (enchantments.keySet().stream().anyMatch(h -> h.is(Enchantments.MENDING))) event.setCanceled(true);
+        }
+        if (hasEffect(player, "stacked_logs") && event.getLeft().getItem() instanceof AxeItem) event.setCanceled(true);
+        if (hasEffect(player, "enchant_level_x_delete_item")) {
+            ItemStack left = event.getLeft();
+            ItemStack right = event.getRight();
+            var leftEnchants = EnchantmentHelper.getEnchantmentsForCrafting(left);
+            var rightEnchants = EnchantmentHelper.getEnchantmentsForCrafting(right);
+            for (Map.Entry<Holder<Enchantment>, Integer> entry : rightEnchants.entrySet()) {
+                Holder<Enchantment> ench = entry.getKey();
+                int rightLevel = entry.getValue();
+                int leftLevel = leftEnchants.getLevel(ench);
+                if (leftLevel == rightLevel && leftLevel >= ench.value().getMaxLevel()) {
+                    ItemStack output = left.copy();
+                    EnchantmentHelper.updateEnchantments(output, (builder) -> builder.set(ench, leftLevel + 1));
+                    event.setOutput(output);
+                    event.setCost(5);
+                }
             }
         }
     }
 
     @SubscribeEvent
     public void onPlayerFinishUsingItem(LivingEntityUseItemEvent.Finish event) {
-        if (event.getEntity() instanceof ServerPlayer player && hasEffect(player, "daily_diamond")) {
-            ItemStack consumedItem = event.getItem();
+        if (!(event.getEntity() instanceof ServerPlayer player)) return;
+
+        ItemStack item = event.getItem();
+        FoodProperties food = item.get(DataComponents.FOOD);
+
+        if (hasEffect(player, "double_food_no_hunger_bar") && food != null) {
+            player.getFoodData().eat(food.nutrition(), food.saturation());
+        }
+        if (hasEffect(player, "random_good_bad_potions")) {
+            List<Holder<MobEffect>> goodEffects = BuiltInRegistries.MOB_EFFECT.holders().filter(h -> h.value().isBeneficial()).collect(Collectors.toList());
+            List<Holder<MobEffect>> badEffects = BuiltInRegistries.MOB_EFFECT.holders().filter(h -> !h.value().isBeneficial()).collect(Collectors.toList());
+            if(!goodEffects.isEmpty() && !badEffects.isEmpty()) {
+                player.addEffect(new MobEffectInstance(goodEffects.get(player.getRandom().nextInt(goodEffects.size())), 600));
+                player.addEffect(new MobEffectInstance(badEffects.get(player.getRandom().nextInt(badEffects.size())), 600));
+            }
+        }
+        if (hasEffect(player, "daily_diamond")) {
             WyrSavedData savedData = WyrSavedData.get(player.serverLevel());
             int currentThirst = savedData.getPlayerThirst(player.getUUID());
             int newThirst = currentThirst;
-
-            // Check if the item is MEAT
-            if (consumedItem.is(ItemTags.MEAT)) {
-                // Lose 2 thirst bars (4 points)
-                newThirst = Math.max(0, currentThirst - 4);
+            if (item.is(ItemTags.MEAT)) newThirst = Math.max(0, currentThirst - 4);
+            else if (item.is(Items.MELON_SLICE)) newThirst = Math.min(20, currentThirst + 2);
+            else if (item.is(Items.POTION)) {
+                var potionContents = item.get(DataComponents.POTION_CONTENTS);
+                if (potionContents != null && potionContents.potion().isPresent() && potionContents.potion().get().is(Potions.WATER)) newThirst = Math.min(20, currentThirst + 4);
             }
-            // Check if the item is a MELON
-            else if (consumedItem.is(Items.MELON_SLICE) || consumedItem.is(Items.GLISTERING_MELON_SLICE)) {
-                // Gain 1 thirst bar (2 points)
-                newThirst = Math.min(20, currentThirst + 2);
-            }
-            else if (consumedItem.is(Items.POTION)) {
-                var potionContents = consumedItem.get(DataComponents.POTION_CONTENTS);
-                if (potionContents != null && potionContents.potion().isPresent() && potionContents.potion().get().is(Potions.WATER)) {
-                    // Gain 2 thirst bars (4 points)
-                    newThirst = Math.min(20, currentThirst + 4);
-                }
-            }
-
-            // If the thirst level changed, update it and sync with the client.
             if (newThirst != currentThirst) {
                 savedData.setPlayerThirst(player.getUUID(), newThirst);
                 PacketDistributor.sendToPlayer(player, new PacketSyncThirst(newThirst));
+            }
+        }
+        if (hasEffect(player, "eat_anything_hunger_chance")) {
+            if (food == null && player.getRandom().nextFloat() < 0.1) {
+                player.addEffect(new MobEffectInstance(MobEffects.HUNGER, 600, 0));
+            }
+        }
+    }
+
+    @SubscribeEvent
+    public void onPlayerUseItemStart(LivingEntityUseItemEvent.Start event) {
+        if (event.getEntity() instanceof Player player) {
+            ItemStack itemStack = event.getItem();
+            if (hasEffect(player, "insta_grow_bread_only") && itemStack.get(DataComponents.FOOD) != null && !itemStack.is(Items.BREAD)) {
+                event.setCanceled(true);
+            }
+            if (hasEffect(player, "stack_512_melon_only") && itemStack.get(DataComponents.FOOD) != null && !itemStack.is(Items.MELON_SLICE)) {
+                event.setCanceled(true);
             }
         }
     }
 
     @SubscribeEvent
     public void onRightClickItem(PlayerInteractEvent.RightClickItem event) {
-
-    }
-
-    @SubscribeEvent
-    public void onItemCrafted(PlayerEvent.ItemCraftedEvent event) {
         Player player = event.getEntity();
-
-        if (hasEffect(player, "stacked_logs")) {
-            ItemStack crafted = event.getCrafting();
-            if (crafted.getItem() instanceof AxeItem) {
-                CompoundTag tag = crafted.getOrDefault(DataComponents.CUSTOM_DATA, CustomData.EMPTY).copyTag();
-                crafted.setDamageValue(crafted.getMaxDamage() - 10);
-                tag.putBoolean("WyrNerfed", true);
-                crafted.set(DataComponents.CUSTOM_DATA, CustomData.of(tag));
-            }
-        }
-        if (hasEffect(player, "strength_ii")) {
-            if (event.getCrafting().getItem() instanceof ShieldItem) {
-                event.getCrafting().setCount(0);
-            }
-        }
+        if (hasEffect(player, "unbreakable_elytra_no_boost") && player.isFallFlying() && event.getItemStack().is(Items.FIREWORK_ROCKET)) event.setCanceled(true);
+        if (hasEffect(player, "eat_anything_hunger_chance") && event.getItemStack().get(DataComponents.FOOD) == null && player.canEat(false)) player.startUsingItem(event.getHand());
     }
 
     @SubscribeEvent
@@ -587,52 +861,102 @@ public class ChoiceEffects {
         if (!(event.getEntity() instanceof Player player)) return;
         if (hasEffect(player, "creative_flight") && !player.getAbilities().flying) {
             float distance = event.getDistance();
-            if (distance > 3.0F) {
-                int damageAmount = (int) Math.ceil(distance - 3.0F);
-                player.hurt(player.damageSources().fall(), damageAmount);
-            }
+            if (distance > 3.0F) player.hurt(player.damageSources().fall(), (int) Math.ceil(distance - 3.0F));
             event.setCanceled(true);
             return;
         }
         if (hasEffect(player, "high_jump")) {
-            float distance = event.getDistance();
-            if (distance > 2.0F) {
-                int damageAmount = (int) Math.ceil(distance - 2.0F);
-                if (damageAmount > 0) player.hurt(player.damageSources().fall(), (float) damageAmount);
-                event.setCanceled(true);
-            }
+            if (event.getDistance() > 2.0f) player.hurt(player.damageSources().fall(), (event.getDistance() - 2.0f));
+            event.setCanceled(true);
+        }
+        if (hasEffect(player, "mace_max_damage_weak")) {
+            if (player.getMainHandItem().is(Items.MACE) && event.getDistance() >= 3.0F) event.setDamageMultiplier(100f);
+            else if (event.getDistance() > 3.0F) event.setDamageMultiplier(0.5f);
+        }
+        if (hasEffect(player, "no_fall_damage_low_render_distance") || hasEffect(player, "no_fall_damage_sneak_speed")) event.setCanceled(true);
+    }
+
+    @SubscribeEvent
+    public void onPlayerWakeUp(PlayerWakeUpEvent event) {
+        if (event.getEntity() instanceof Player player && hasEffect(player, "sleep_heal_random_drops")) {
+            player.setHealth(player.getMaxHealth());
+            player.getFoodData().setFoodLevel(20);
+            player.getFoodData().setSaturation(5.0F);
         }
     }
 
     @SubscribeEvent
     public void onHeal(LivingHealEvent event) {
-        if (event.getEntity() instanceof Player player) {
-            if (hasEffect(player, "insta_heal")) event.setAmount(player.getMaxHealth());
-        }
+        if (event.getEntity() instanceof Player player && hasEffect(player, "insta_heal")) event.setAmount(player.getMaxHealth());
     }
 
     @SubscribeEvent
     public void onLivingHurt(LivingIncomingDamageEvent event) {
+        if(event.getEntity() instanceof Player player && hasEffect(player, "respawn_on_death_half_durability")) {
+            respawnLocations.put(player.getUUID(), player.blockPosition());
+            respawnDimensions.put(player.getUUID(), player.level().dimension());
+        }
+        if (event.getEntity().getType() == EntityType.ENDER_DRAGON && event.getSource().getEntity() instanceof Player player && hasEffect(player, "one_hit_dragon_no_end")) {
+            event.setAmount(Float.MAX_VALUE);
+        }
         if (event.getEntity() instanceof Player player) {
             if (hasEffect(player, "fire_immunity")) {
-                if (event.getSource().is(DamageTypeTags.IS_FIRE)) {
-                    event.setCanceled(true);
-                } else if (event.getSource().getDirectEntity() instanceof LivingEntity) {
-                    event.setAmount(event.getAmount() * 2);
-                }
+                if (event.getSource().is(DamageTypeTags.IS_FIRE)) event.setCanceled(true);
+                else if (event.getSource().getDirectEntity() instanceof LivingEntity) event.setAmount(event.getAmount() * 2);
             }
-            if (hasEffect(player, "wall_climb") && event.getSource().is(DamageTypeTags.IS_FALL)) {
-                event.setAmount(event.getAmount() * 2);
-            }
+            if (hasEffect(player, "wall_climb") && event.getSource().is(DamageTypeTags.IS_FALL)) event.setAmount(event.getAmount() * 2);
         }
-        if (event.getSource().getEntity() instanceof Player player && hasEffect(player, "triple_damage")) {
-            if (player.getRandom().nextInt(4) == 0) event.setAmount(event.getAmount() * 3);
+        if (event.getSource().getEntity() instanceof Player player && hasEffect(player, "triple_damage") && player.getRandom().nextInt(4) == 0) {
+            event.setAmount(event.getAmount() * 3);
         }
     }
 
-    private void applyHasteDurability(Player player, ItemStack item) {
-        if (hasEffect(player, "haste_ii") && !player.isCreative() && player instanceof ServerPlayer serverPlayer) {
-            if (item.isDamageableItem()) item.hurtAndBreak(1, serverPlayer, EquipmentSlot.MAINHAND);
+    @SubscribeEvent
+    public void onLivingDeath(LivingDeathEvent event) {
+        if (event.getEntity() instanceof Monster monster && event.getSource().getEntity() instanceof Player player) {
+            if (hasEffect(player, "wind_charge_respawn_mob") && !monster.getTags().contains("wyr_respawned")) {
+                Monster newMob = (Monster) monster.getType().create(player.level());
+                if (newMob != null) {
+                    newMob.setPos(monster.position());
+                    newMob.addTag("wyr_respawned");
+                    player.level().addFreshEntity(newMob);
+                }
+            }
+        }
+        if(event.getEntity() instanceof Creeper creeper && event.getSource().getEntity() instanceof Player player && hasEffect(player, "creeper_cake_no_fence_gates")) {
+            if(!creeper.level().isClientSide) {
+                for(int i = 0; i < 20; i++) {
+                    ItemEntity cake = new ItemEntity(creeper.level(), creeper.getX(), creeper.getY(), creeper.getZ(), new ItemStack(Items.CAKE));
+                    cake.setDeltaMovement(RandomSource.create().nextGaussian() * 0.2, 0.3, RandomSource.create().nextGaussian() * 0.2);
+                    creeper.level().addFreshEntity(cake);
+                }
+            }
+            event.setCanceled(true);
+        }
+    }
+
+    @SubscribeEvent
+    public void onPlayerRespawn(PlayerEvent.PlayerRespawnEvent event) {
+        if (event.getEntity() instanceof ServerPlayer player && hasEffect(player, "respawn_on_death_half_durability")) {
+            BlockPos respawnPos = respawnLocations.get(player.getUUID());
+            ResourceKey<Level> respawnDim = respawnDimensions.get(player.getUUID());
+            if (respawnPos != null && respawnDim != null) {
+                ServerLevel targetLevel = player.getServer().getLevel(respawnDim);
+                if (targetLevel != null) player.teleportTo(targetLevel, respawnPos.getX() + 0.5, respawnPos.getY(), respawnPos.getZ() + 0.5, player.getYRot(), player.getXRot());
+                respawnLocations.remove(player.getUUID());
+                respawnDimensions.remove(player.getUUID());
+            }
+        }
+    }
+
+    @SubscribeEvent
+    public void onPlayerDropItems(PlayerEvent.Clone event) {
+        if (hasEffect(event.getOriginal(), "respawn_on_death_half_durability") && event.isWasDeath()) {
+            for (int i = 0; i < event.getOriginal().getInventory().getContainerSize(); i++) {
+                ItemStack stack = event.getOriginal().getInventory().getItem(i);
+                if (stack.isDamageableItem()) stack.setDamageValue(stack.getDamageValue() + (stack.getMaxDamage() - stack.getDamageValue()) / 2);
+                event.getEntity().getInventory().setItem(i, stack);
+            }
         }
     }
 
@@ -641,6 +965,12 @@ public class ChoiceEffects {
         Player player = event.getEntity();
         if (hasEffect(player, "mob_invisibility")) event.setCanceled(true);
         applyHasteDurability(player, player.getMainHandItem());
+        if (hasEffect(player, "op_bow_only") && !(player.getMainHandItem().getItem() instanceof BowItem)) event.setCanceled(true);
+        if (hasEffect(player, "fire_sword_self_damage")) {
+            var enchantRegistry = player.level().holderLookup(Registries.ENCHANTMENT);
+            int fireLevel = EnchantmentHelper.getItemEnchantmentLevel(enchantRegistry.getOrThrow(Enchantments.FIRE_ASPECT), player.getMainHandItem());
+            if (fireLevel > 0) player.igniteForSeconds(fireLevel * 8);
+        }
     }
 
     @SubscribeEvent
@@ -648,12 +978,185 @@ public class ChoiceEffects {
         applyHasteDurability(event.getEntity(), event.getItemStack());
     }
 
-
-
     @SubscribeEvent
     public void onSetTarget(LivingChangeTargetEvent event) {
-        if (event.getEntity() instanceof Monster && event.getNewAboutToBeSetTarget() instanceof Player player) {
-            if (hasEffect(player, "mob_invisibility")) event.setNewAboutToBeSetTarget(null);
+        if (event.getEntity() instanceof Monster monster) {
+            for (Map.Entry<UUID, Set<UUID>> entry : tamedMonsters.entrySet()) {
+                UUID ownerUUID = entry.getKey();
+                if (entry.getValue().contains(monster.getUUID())) {
+                    Player owner = monster.level().getPlayerByUUID(ownerUUID);
+                    if (owner != null && monster.getTarget() != null && monster.getTarget().equals(owner)) monster.setTarget(null);
+                    else if (owner != null && monster.getTarget() == null && owner.getLastHurtByMob() != null) monster.setTarget(owner.getLastHurtByMob());
+                }
+            }
+            if (event.getNewAboutToBeSetTarget() instanceof Player player) {
+                if (hasEffect(player, "mob_invisibility") || hasEffect(player, "hidden_from_mobs_slow_ores") || (hasEffect(player, "night_vision") && !(event.getEntity() instanceof EnderMan))) {
+                    event.setNewAboutToBeSetTarget(null);
+                }
+            }
+        }
+    }
+
+    @SubscribeEvent
+    public void onEntityJoinWorld(EntityJoinLevelEvent event) {
+        if (event.getEntity() instanceof Monster monster) {
+            monster.level().players().forEach(player -> {
+                if (hasEffect(player, "see_mob_hp_double_health") || hasEffect(player, "triple_loot_triple_health")) {
+                    AttributeInstance health = monster.getAttribute(Attributes.MAX_HEALTH);
+                    if (health != null) {
+                        ResourceLocation modifierId = ResourceLocation.fromNamespaceAndPath(WYR.MODID, "health_mod_" + player.getUUID());
+                        health.removeModifier(modifierId);
+                        double multiplier = hasEffect(player, "triple_loot_triple_health") ? 2.0 : 1.0;
+                        if (hasEffect(player, "half_health_mobs_no_drops")) multiplier = -0.5;
+                        health.addPermanentModifier(new AttributeModifier(modifierId, multiplier, AttributeModifier.Operation.ADD_MULTIPLIED_TOTAL));
+                        monster.setHealth(monster.getMaxHealth());
+                    }
+                }
+            });
+        }
+    }
+
+    @SubscribeEvent
+    public void onAnimalTame(AnimalTameEvent event) {
+        if(event.getTamer() instanceof Player player && event.getAnimal() instanceof Wolf wolf && hasEffect(player, "strong_wolves_one_hp")) {
+            AttributeInstance health = wolf.getAttribute(Attributes.MAX_HEALTH);
+            if (health != null) health.addPermanentModifier(new AttributeModifier(WOLF_HEALTH_MODIFIER_ID, -health.getBaseValue() + 1, AttributeModifier.Operation.ADD_VALUE));
+            AttributeInstance damage = wolf.getAttribute(Attributes.ATTACK_DAMAGE);
+            if (damage != null) damage.addPermanentModifier(new AttributeModifier(WOLF_STRENGTH_MODIFIER_ID, 4.0, AttributeModifier.Operation.ADD_MULTIPLIED_BASE));
+            AttributeInstance speed = wolf.getAttribute(Attributes.MOVEMENT_SPEED);
+            if (speed != null) speed.addPermanentModifier(new AttributeModifier(WOLF_SPEED_MODIFIER_ID, 2.0, AttributeModifier.Operation.ADD_MULTIPLIED_BASE));
+            wolf.setHealth(1.0f);
+        }
+    }
+
+    @SubscribeEvent
+    public void onLivingDrops(LivingDropsEvent event) {
+        if (event.getSource().getEntity() instanceof Player player) {
+            if (hasEffect(player, "mob_loot_inventory_slots")) event.getDrops().forEach(itemEntity -> itemEntity.getItem().setCount(itemEntity.getItem().getCount() * 5));
+            if (hasEffect(player, "triple_loot_triple_health") && event.getEntity() instanceof Monster) event.getDrops().forEach(itemEntity -> itemEntity.getItem().setCount(itemEntity.getItem().getCount() * 3));
+            if (hasEffect(player, "half_health_mobs_no_drops")) event.getDrops().clear();
+            if (hasEffect(player, "emeralds_from_mobs_siren") && event.getEntity() instanceof Monster) event.getDrops().add(new ItemEntity(player.level(), event.getEntity().getX(), event.getEntity().getY(), event.getEntity().getZ(), new ItemStack(Items.EMERALD, 2)));
+        }
+    }
+
+    @SubscribeEvent
+    public void onEntityInteract(PlayerInteractEvent.EntityInteract event) {
+        // In this event, getEntity() is the player.
+        if (!(event.getEntity() instanceof Player player)) {
+            return;
+        }
+
+        ItemStack stack = event.getItemStack();
+        Entity target = event.getTarget();
+
+        // --- Corrected Logic for "wool_stack_random_crosshair" ---
+        if (hasEffect(player, "wool_stack_random_crosshair") && target instanceof Sheep sheep && stack.getItem() instanceof ShearsItem) {
+
+            // --- THIS IS THE CORRECTED LINE ---
+            // The isShearable() method requires the player, item, level, and position.
+            if (sheep.isShearable(player, stack, player.level(), sheep.blockPosition())) {
+                // We are handling this interaction manually, so cancel the default behavior
+                event.setCanceled(true);
+
+                sheep.level().playSound(null, sheep, SoundEvents.SHEEP_SHEAR, SoundSource.PLAYERS, 1.0F, 1.0F);
+                sheep.gameEvent(GameEvent.SHEAR, player);
+                sheep.setSheared(true); // Manually set the sheep to sheared state
+
+                // Use our new map to get the correct wool color
+                Item woolItem = WOOL_BY_COLOR.getOrDefault(sheep.getColor(), Items.WHITE_WOOL);
+                sheep.spawnAtLocation(new ItemStack(woolItem, 64));
+
+                // Correctly damage the shears
+                if (!player.isCreative()) {
+                    EquipmentSlot slot = event.getHand() == InteractionHand.MAIN_HAND ? EquipmentSlot.MAINHAND : EquipmentSlot.OFFHAND;
+                    stack.hurtAndBreak(1, player, slot);
+                }
+                return; // Stop processing since we've handled the shearing
+            }
+        }
+
+        // --- Logic for "tame_hostiles_no_crafting" ---
+        if (hasEffect(player, "tame_hostiles_no_crafting") && stack.is(Items.NETHERITE_BLOCK) && target instanceof Monster monster) {
+            Set<UUID> playerTamed = tamedMonsters.computeIfAbsent(player.getUUID(), k -> new HashSet<>());
+            if (!playerTamed.contains(monster.getUUID())) {
+                playerTamed.add(monster.getUUID());
+                monster.setTarget(null);
+                if (!player.isCreative()) {
+                    stack.shrink(1);
+                }
+                player.level().playSound(null, monster.blockPosition(), SoundEvents.PLAYER_LEVELUP, SoundSource.PLAYERS, 1.0F, 1.0F);
+                event.setCanceled(true);
+            }
+        }
+    }
+
+    @SubscribeEvent
+    public void onBonemeal(BonemealEvent event) {
+        Player player = event.getPlayer();
+        Level level = event.getLevel();
+        BlockPos pos = event.getPos();
+        BlockState state = level.getBlockState(pos);
+
+        if (hasEffect(player, "bonemeal_ores_cobblestone") && isOre(state)) {
+            if (level.isClientSide) return;
+            if (player.getRandom().nextFloat() < 0.5) {
+                level.setBlock(pos, Blocks.COBBLESTONE.defaultBlockState(), 3);
+            } else {
+                for (Direction dir : Direction.values()) {
+                    BlockPos adjacent = pos.relative(dir);
+                    if (level.getBlockState(adjacent).is(BlockTags.BASE_STONE_OVERWORLD)) {
+                        level.setBlock(adjacent, state, 3);
+                    }
+                }
+            }
+            event.getStack().shrink(1);
+            event.setCanceled(true);
+            return;
+        }
+        if (hasEffect(player, "insta_grow_bread_only")) {
+            if (state.getBlock() instanceof BonemealableBlock bonemealable && bonemealable.isValidBonemealTarget(level, pos, state)) {
+                if (level instanceof ServerLevel serverLevel) bonemealable.performBonemeal(serverLevel, player.getRandom(), pos, state);
+                event.setCanceled(true);
+            }
+        }
+    }
+
+    @SubscribeEvent
+    public void onCommand(CommandEvent event) {
+        if(event.getParseResults().getContext().getSource().getEntity() instanceof Player player) {
+            String command = event.getParseResults().getReader().getString();
+            if (hasEffect(player, "weather_control_creeper") && command.startsWith("weather")) {
+                Creeper creeper = EntityType.CREEPER.create(player.level());
+                if (creeper != null) {
+                    creeper.setPos(player.position());
+                    creeper.ignite();
+                    player.level().addFreshEntity(creeper);
+                }
+            }
+        }
+    }
+
+    @SubscribeEvent
+    public void onPlayerChangeDimension(PlayerEvent.PlayerChangedDimensionEvent event) {
+        if (event.getEntity() instanceof Player player && hasEffect(player, "one_hit_dragon_no_end")) {
+            if (event.getTo() == Level.END) {
+                // This will teleport the player back to their spawn point in the overworld.
+                ServerPlayer serverPlayer = (ServerPlayer) player;
+                BlockPos respawnPos = serverPlayer.getRespawnPosition();
+                ServerLevel overworld = serverPlayer.server.overworld();
+                if (respawnPos != null) {
+                    serverPlayer.teleportTo(overworld, respawnPos.getX(), respawnPos.getY(), respawnPos.getZ(), serverPlayer.getRespawnAngle(), 0);
+                } else {
+                    BlockPos spawn = overworld.getSharedSpawnPos();
+                    serverPlayer.teleportTo(overworld, spawn.getX(), spawn.getY(), spawn.getZ(), 0, 0);
+                }
+            }
+        }
+    }
+
+    private void applyHasteDurability(Player player, ItemStack item) {
+        if (hasEffect(player, "haste_ii") && !player.isCreative() && player instanceof ServerPlayer serverPlayer) {
+            if (item.isDamageableItem()) item.hurtAndBreak(1, serverPlayer, EquipmentSlot.MAINHAND);
         }
     }
 
@@ -665,12 +1168,35 @@ public class ChoiceEffects {
             Vec3 endPos = startPos.add(player.getLookAngle().scale(range));
             BlockHitResult rayTrace = player.level().clip(new ClipContext(startPos, endPos, ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, player));
             Vec3 targetPos = (rayTrace.getType() == HitResult.Type.MISS) ? endPos : rayTrace.getLocation();
-            if (player instanceof ServerPlayer serverPlayer) {
-                serverPlayer.teleportTo(targetPos.x, targetPos.y, targetPos.z);
-            }
+            if (player instanceof ServerPlayer serverPlayer) serverPlayer.teleportTo(targetPos.x, targetPos.y, targetPos.z);
             player.fallDistance = 0.0F;
             player.hurt(player.damageSources().magic(), 4.0F);
             teleportCooldowns.put(player.getUUID(), currentTime + 5000);
+        }
+    }
+
+    private void handleGolemSet(Player player) {
+        boolean hasFullSet = player.getItemBySlot(EquipmentSlot.HEAD).is(ModItems.GOLEM_HELMET.get()) &&
+                player.getItemBySlot(EquipmentSlot.CHEST).is(ModItems.GOLEM_CHESTPLATE.get()) &&
+                player.getItemBySlot(EquipmentSlot.LEGS).is(ModItems.GOLEM_LEGGINGS.get()) &&
+                player.getItemBySlot(EquipmentSlot.FEET).is(ModItems.GOLEM_BOOTS.get());
+
+        AttributeInstance health = player.getAttribute(Attributes.MAX_HEALTH);
+        AttributeInstance strength = player.getAttribute(Attributes.ATTACK_DAMAGE);
+        AttributeInstance speed = player.getAttribute(Attributes.MOVEMENT_SPEED);
+        if (health == null || strength == null || speed == null) return;
+
+        if (hasFullSet) {
+            if (!health.hasModifier(GOLEM_HEALTH_MODIFIER_ID)) health.addPermanentModifier(new AttributeModifier(GOLEM_HEALTH_MODIFIER_ID, 80.0, AttributeModifier.Operation.ADD_VALUE));
+            if (!strength.hasModifier(GOLEM_STRENGTH_MODIFIER_ID)) strength.addPermanentModifier(new AttributeModifier(GOLEM_STRENGTH_MODIFIER_ID, 14.0, AttributeModifier.Operation.ADD_VALUE));
+            if (!speed.hasModifier(GOLEM_SPEED_MODIFIER_ID)) speed.addPermanentModifier(new AttributeModifier(GOLEM_SPEED_MODIFIER_ID, -0.7, AttributeModifier.Operation.ADD_MULTIPLIED_TOTAL));
+        } else {
+            if (health.hasModifier(GOLEM_HEALTH_MODIFIER_ID)) {
+                health.removeModifier(GOLEM_HEALTH_MODIFIER_ID);
+                if(player.getHealth() > player.getMaxHealth()) player.setHealth(player.getMaxHealth());
+            }
+            if (strength.hasModifier(GOLEM_STRENGTH_MODIFIER_ID)) strength.removeModifier(GOLEM_STRENGTH_MODIFIER_ID);
+            if (speed.hasModifier(GOLEM_SPEED_MODIFIER_ID)) speed.removeModifier(GOLEM_SPEED_MODIFIER_ID);
         }
     }
 }

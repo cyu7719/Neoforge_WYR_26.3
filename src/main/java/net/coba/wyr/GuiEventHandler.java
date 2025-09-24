@@ -1,3 +1,4 @@
+// GuiEventHandler.java
 package net.coba.wyr;
 
 import net.minecraft.client.gui.components.AbstractWidget;
@@ -13,50 +14,42 @@ import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.item.AxeItem;
 import net.minecraft.world.item.ItemStack;
 import net.neoforged.bus.api.SubscribeEvent;
+import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
 import net.neoforged.neoforge.client.event.ScreenEvent;
+import net.neoforged.neoforge.network.PacketDistributor;
 
 import java.lang.reflect.Method;
-import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 
-/**
- * Handles GUI-related events to inject custom widgets into screens.
- */
 public class GuiEventHandler {
 
-    private static final List<String> INTERVAL_VALUES = Arrays.asList("None", "30s", "1min", "3min", "5min", "10min");
-    private static String currentInterval = INTERVAL_VALUES.get(0);
+    private static final Map<String, Integer> INTERVAL_MAP = Map.of(
+            "Disabled", 0,
+            "30s", 30 * 20,
+            "1min", 60 * 20,
+            "3min", 180 * 20,
+            "5min", 300 * 20,
+            "10min", 600 * 20
+    );
+    private static final List<String> INTERVAL_KEYS = List.of("Disabled", "30s", "1min", "3min", "5min", "10min");
+    private static String currentInterval = INTERVAL_KEYS.get(0);
     private boolean buttonAdded = false;
 
     @SubscribeEvent
     public void onScreenRenderPre(ScreenEvent.Render.Pre event) {
         Screen screen = event.getScreen();
-
-        // Check if the screen is either a CraftingScreen (3x3) or InventoryScreen (2x2)
         if (screen instanceof CraftingScreen || screen instanceof InventoryScreen) {
             if (ClientEffectCache.hasStackedLogs()) {
-                // Cast to a generic screen type to access the getMenu() method
                 var menuProvider = (net.minecraft.client.gui.screens.inventory.MenuAccess<?>) screen;
                 AbstractContainerMenu menu = menuProvider.getMenu();
-
-                // In both menus, slot 1 is part of the crafting grid. Its container is the crafting inventory.
-                // We check if there are enough slots to prevent crashing on smaller inventories.
                 if (menu.slots.size() > 1) {
                     Container craftSlots = menu.getSlot(1).container;
                     int axeCount = 0;
-
-                    // Loop through all slots within that specific crafting container
                     for (int i = 0; i < craftSlots.getContainerSize(); i++) {
-                        if (craftSlots.getItem(i).getItem() instanceof AxeItem) {
-                            axeCount++;
-                        }
+                        if (craftSlots.getItem(i).getItem() instanceof AxeItem) axeCount++;
                     }
-
-                    // If more than one axe is present, it's a repair. Block the recipe by clearing the output.
-                    if (axeCount > 1) {
-                        // Slot 0 is always the result slot in both menus.
-                        menu.getSlot(0).set(ItemStack.EMPTY);
-                    }
+                    if (axeCount > 1) menu.getSlot(0).set(ItemStack.EMPTY);
                 }
             }
         }
@@ -64,15 +57,13 @@ public class GuiEventHandler {
 
     @SubscribeEvent
     public void onScreenInit(ScreenEvent.Init.Post event) {
-        if (event.getScreen() instanceof CreateWorldScreen) {
-            buttonAdded = false;
-        }
+        if (event.getScreen() instanceof CreateWorldScreen) buttonAdded = false;
     }
 
+    // --- THIS IS THE MODIFIED METHOD ---
     @SubscribeEvent
     public void onScreenRender(ScreenEvent.Render.Post event) {
         if (event.getScreen() instanceof CreateWorldScreen screen && !buttonAdded) {
-
             AbstractWidget cheatsButton = null;
             for (GuiEventListener child : screen.children()) {
                 if (child instanceof AbstractWidget widget) {
@@ -84,26 +75,22 @@ public class GuiEventHandler {
             }
 
             if (cheatsButton != null) {
-                int buttonX = cheatsButton.getX();
-                int verticalSpacing = 8;
-                int buttonY = cheatsButton.getY() + cheatsButton.getHeight() + verticalSpacing;
-                int buttonWidth = cheatsButton.getWidth();
-                int buttonHeight = cheatsButton.getHeight();
-
+                // The CycleButton creation logic is now corrected
                 CycleButton<String> intervalButton = CycleButton.<String>builder(
-                                (value) -> Component.literal(value)
+                                // FIX #1: The value function should ONLY display the value itself.
+                                Component::literal
                         )
-                        .withValues(INTERVAL_VALUES)
+                        .withValues(INTERVAL_KEYS)
                         .withInitialValue(currentInterval)
                         .create(
-                                buttonX,
-                                buttonY,
-                                buttonWidth,
-                                buttonHeight,
-                                Component.literal("Prompt Interval: "),
-                                (cycleButton, value) -> {
+                                cheatsButton.getX(),
+                                cheatsButton.getY() + cheatsButton.getHeight() + 8,
+                                cheatsButton.getWidth(),
+                                cheatsButton.getHeight(),
+                                // FIX #2: The name is the static prefix. Minecraft adds the ":" automatically.
+                                Component.literal("Prompt Interval"),
+                                (btn, value) -> {
                                     currentInterval = value;
-                                    PromptManager.setPromptInterval(value);
                                 }
                         );
 
@@ -112,12 +99,16 @@ public class GuiEventHandler {
                     addRenderableWidgetMethod.setAccessible(true);
                     addRenderableWidgetMethod.invoke(screen, intervalButton);
                 } catch (Exception e) {
-                    System.err.println("Could not add custom button to CreateWorldScreen via reflection.");
-                    e.printStackTrace();
+                    WYR.LOGGER.error("Could not add custom button to CreateWorldScreen", e);
                 }
-
                 buttonAdded = true;
             }
         }
+    }
+
+    @SubscribeEvent
+    public void onClientLogin(ClientPlayerNetworkEvent.LoggingIn event) {
+        int intervalTicks = INTERVAL_MAP.getOrDefault(currentInterval, 0);
+        PacketDistributor.sendToServer(new PacketSetPromptInterval(intervalTicks));
     }
 }

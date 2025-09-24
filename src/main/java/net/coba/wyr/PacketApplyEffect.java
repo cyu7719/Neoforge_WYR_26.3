@@ -1,3 +1,4 @@
+// PacketApplyEffect.java
 package net.coba.wyr;
 
 import net.minecraft.network.FriendlyByteBuf;
@@ -28,10 +29,20 @@ public record PacketApplyEffect(String effectId) implements CustomPacketPayload 
             if (context.player() instanceof ServerPlayer serverPlayer) {
                 Choice choice = ChoiceRegistry.getChoiceById(message.effectId());
                 if (choice != null) {
-                    ChoiceEffects.applyEffect(serverPlayer, message.effectId());
+                    ChoiceEffects.applyInitialEffect(serverPlayer, message.effectId());
                     PlayerChoiceTracker.addChoice(serverPlayer, choice);
-                    // Increment the player's persistent prompt counter.
                     PlayerChoiceTracker.incrementPromptCount(serverPlayer);
+                    PlayerChoiceTracker.setPromptPending(serverPlayer, false);
+
+                    WyrSavedData savedData = WyrSavedData.get(serverPlayer.serverLevel());
+                    int interval = savedData.getPlayerPromptInterval(serverPlayer.getUUID());
+                    if (interval > 0) {
+                        long nextTime = serverPlayer.level().getGameTime() + interval;
+                        savedData.setNextPromptTime(serverPlayer.getUUID(), nextTime);
+                    }
+
+                    // Force a save to disk to persist the new timer state immediately
+                    serverPlayer.serverLevel().getDataStorage().save();
                 }
             }
         });

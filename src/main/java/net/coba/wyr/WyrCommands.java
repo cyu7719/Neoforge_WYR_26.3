@@ -99,7 +99,7 @@ public class WyrCommands {
         }
 
         // Apply the game effect
-        ChoiceEffects.applyEffect(player, effectId);
+        ChoiceEffects.applyInitialEffect(player, effectId);
         // AND add the choice to the tracker so it appears in the GUI list.
         PlayerChoiceTracker.addChoice(player, choice);
         // --- END OF FIX ---

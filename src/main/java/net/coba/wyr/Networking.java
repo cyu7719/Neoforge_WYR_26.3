@@ -12,6 +12,8 @@ public class Networking {
     private static void registerPayloads(final RegisterPayloadHandlersEvent event) {
         var registrar = event.registrar(WYR.MODID);
 
+        registrar.playToServer(PacketSetPromptInterval.TYPE, PacketSetPromptInterval.STREAM_CODEC, PacketSetPromptInterval::handle);
+
         registrar.playToServer(PacketTeleport.TYPE, PacketTeleport.STREAM_CODEC, PacketTeleport::handle);
 
         registrar.playToServer(PacketApplyEffect.TYPE, PacketApplyEffect.STREAM_CODEC, PacketApplyEffect::handle);
@@ -27,5 +29,7 @@ public class Networking {
         registrar.playToClient(PacketSyncThirst.TYPE, PacketSyncThirst.STREAM_CODEC, PacketSyncThirst::handle);
 
         registrar.playToClient(PacketSyncStackedLogsStatus.TYPE, PacketSyncStackedLogsStatus.STREAM_CODEC, PacketSyncStackedLogsStatus::handle);
+
+        registrar.playToClient(PacketPlayCustomSound.TYPE, PacketPlayCustomSound.STREAM_CODEC, PacketPlayCustomSound::handle);
     }
 }

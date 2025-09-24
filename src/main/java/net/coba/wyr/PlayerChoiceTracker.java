@@ -1,3 +1,4 @@
+// PlayerChoiceTracker.java
 package net.coba.wyr;
 
 import net.minecraft.server.level.ServerPlayer;
@@ -10,9 +11,6 @@ import java.util.List;
 import java.util.Objects;
 import java.util.stream.Collectors;
 
-/**
- * A server-side manager that acts as an interface for accessing persistent player data from WyrSavedData.
- */
 public class PlayerChoiceTracker {
 
     private static WyrSavedData getSavedData(ServerPlayer player) {
@@ -23,7 +21,6 @@ public class PlayerChoiceTracker {
         getSavedData(player).addPlayerChoice(player.getUUID(), choice.getId());
     }
 
-    // --- NEW METHOD ---
     public static void removeChoice(ServerPlayer player, String choiceId) {
         getSavedData(player).removePlayerChoice(player.getUUID(), choiceId);
     }
@@ -47,22 +44,36 @@ public class PlayerChoiceTracker {
         getSavedData(player).incrementPlayerPromptCount(player.getUUID());
     }
 
-    /**
-     * When a player joins the server, re-apply all their saved effects.
-     */
+    public static boolean isPromptPending(ServerPlayer player) {
+        return getSavedData(player).isPromptPending(player.getUUID());
+    }
+
+    public static void setPromptPending(ServerPlayer player, boolean pending) {
+        getSavedData(player).setPromptPending(player.getUUID(), pending);
+    }
+
     @SubscribeEvent
     public void onPlayerLoggedIn(PlayerEvent.PlayerLoggedInEvent event) {
         if (event.getEntity() instanceof ServerPlayer player) {
-            // Re-apply effects from saved data
             List<Choice> choices = getChoices(player);
             boolean hasStackedLogs = false;
             for (Choice choice : choices) {
-                ChoiceEffects.applyEffect(player, choice.getId());
+                // MODIFICATION: Call the reapply method to avoid giving items again
+                ChoiceEffects.reapplyPersistentEffect(player, choice.getId());
                 if ("stacked_logs".equals(choice.getId())) {
                     hasStackedLogs = true;
                 }
             }
             PacketDistributor.sendToPlayer(player, new PacketSyncStackedLogsStatus(hasStackedLogs));
+
+            if (isPromptPending(player)) {
+                List<Choice> newChoices = ChoiceRegistry.getFilteredRandomChoicesForPlayer(player);
+                if (!newChoices.isEmpty()) {
+                    PacketDistributor.sendToPlayer(player, new PacketSyncNewChoices(newChoices));
+                } else {
+                    setPromptPending(player, false);
+                }
+            }
         }
     }
 }
