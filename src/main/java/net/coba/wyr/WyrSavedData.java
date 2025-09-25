@@ -1,4 +1,3 @@
-// WyrSavedData.java
 package net.coba.wyr;
 
 import net.minecraft.core.HolderLookup;
@@ -19,10 +18,9 @@ public class WyrSavedData extends SavedData {
     private final Map<UUID, List<String>> playerChoices = new HashMap<>();
     private final Map<UUID, Integer> playerPromptCounts = new HashMap<>();
     private final Map<UUID, Boolean> playerPromptPending = new HashMap<>();
-    // --- NEW DATA FOR PERSISTENT TIMER ---
     private final Map<UUID, Integer> playerPromptIntervals = new HashMap<>();
     private final Map<UUID, Long> playerNextPromptTimes = new HashMap<>();
-    // ---
+    private final Map<UUID, Integer> playerScrambleStates = new HashMap<>();
     private final Map<UUID, Integer> playerThirstLevels = new HashMap<>();
     private final Map<UUID, Float> playerThirstExhaustion = new HashMap<>();
 
@@ -33,10 +31,9 @@ public class WyrSavedData extends SavedData {
     private static final String TAG_PLAYER_CHOICES = "PlayerChoices";
     private static final String TAG_PLAYER_PROMPT_COUNT = "PlayerPromptCount";
     private static final String TAG_PLAYER_PROMPT_PENDING = "PlayerPromptPending";
-    // --- NEW NBT KEYS ---
     private static final String TAG_PLAYER_PROMPT_INTERVAL = "PlayerPromptInterval";
     private static final String TAG_PLAYER_NEXT_PROMPT_TIME = "PlayerNextPromptTime";
-    // ---
+    private static final String TAG_PLAYER_SCRAMBLE_STATE = "PlayerScrambleState";
     private static final String TAG_PLAYER_THIRST_LEVEL = "PlayerThirstLevel";
     private static final String TAG_PLAYER_THIRST_EXHAUSTION = "PlayerThirstExhaustion";
 
@@ -45,24 +42,24 @@ public class WyrSavedData extends SavedData {
 
     public static WyrSavedData get(ServerLevel world) {
         DimensionDataStorage storage = world.getDataStorage();
-        return storage.computeIfAbsent(new Factory<>(WyrSavedData::new, WyrSavedData::load, null), DATA_NAME);
+        return storage.computeIfAbsent(new SavedData.Factory<>(WyrSavedData::new, WyrSavedData::load, null), DATA_NAME);
     }
 
     public static WyrSavedData load(CompoundTag nbt, HolderLookup.Provider provider) {
         WyrSavedData data = new WyrSavedData();
 
-        ListTag shownPairsTag = nbt.getList(TAG_SHOWN_PAIRS, 8);
+        ListTag shownPairsTag = nbt.getList(TAG_SHOWN_PAIRS, 8); // 8 = String NBT
         for (int i = 0; i < shownPairsTag.size(); i++) {
             data.shownChoicePairs.add(shownPairsTag.getString(i));
         }
 
-        if (nbt.contains(TAG_PLAYER_DATA, 10)) {
+        if (nbt.contains(TAG_PLAYER_DATA, 10)) { // 10 = Compound NBT
             CompoundTag allPlayerData = nbt.getCompound(TAG_PLAYER_DATA);
             for (String uuidString : allPlayerData.getAllKeys()) {
                 UUID uuid = UUID.fromString(uuidString);
                 CompoundTag playerTag = allPlayerData.getCompound(uuidString);
 
-                if (playerTag.contains(TAG_PLAYER_CHOICES, 9)) {
+                if (playerTag.contains(TAG_PLAYER_CHOICES, 9)) { // 9 = List NBT
                     List<String> choices = new ArrayList<>();
                     ListTag choicesTag = playerTag.getList(TAG_PLAYER_CHOICES, 8);
                     for (int i = 0; i < choicesTag.size(); i++) choices.add(choicesTag.getString(i));
@@ -72,6 +69,7 @@ public class WyrSavedData extends SavedData {
                 if (playerTag.contains(TAG_PLAYER_PROMPT_PENDING, 1)) data.playerPromptPending.put(uuid, playerTag.getBoolean(TAG_PLAYER_PROMPT_PENDING));
                 if (playerTag.contains(TAG_PLAYER_PROMPT_INTERVAL, 3)) data.playerPromptIntervals.put(uuid, playerTag.getInt(TAG_PLAYER_PROMPT_INTERVAL));
                 if (playerTag.contains(TAG_PLAYER_NEXT_PROMPT_TIME, 4)) data.playerNextPromptTimes.put(uuid, playerTag.getLong(TAG_PLAYER_NEXT_PROMPT_TIME));
+                if (playerTag.contains(TAG_PLAYER_SCRAMBLE_STATE, 3)) data.playerScrambleStates.put(uuid, playerTag.getInt(TAG_PLAYER_SCRAMBLE_STATE));
                 if (playerTag.contains(TAG_PLAYER_THIRST_LEVEL, 3)) data.playerThirstLevels.put(uuid, playerTag.getInt(TAG_PLAYER_THIRST_LEVEL));
                 if (playerTag.contains(TAG_PLAYER_THIRST_EXHAUSTION, 5)) data.playerThirstExhaustion.put(uuid, playerTag.getFloat(TAG_PLAYER_THIRST_EXHAUSTION));
             }
@@ -92,7 +90,9 @@ public class WyrSavedData extends SavedData {
         allPlayerUUIDs.addAll(playerPromptPending.keySet());
         allPlayerUUIDs.addAll(playerPromptIntervals.keySet());
         allPlayerUUIDs.addAll(playerNextPromptTimes.keySet());
+        allPlayerUUIDs.addAll(playerScrambleStates.keySet());
         allPlayerUUIDs.addAll(playerThirstLevels.keySet());
+        allPlayerUUIDs.addAll(playerThirstExhaustion.keySet());
 
         for (UUID uuid : allPlayerUUIDs) {
             CompoundTag playerTag = new CompoundTag();
@@ -108,6 +108,7 @@ public class WyrSavedData extends SavedData {
             if (playerPromptPending.containsKey(uuid)) playerTag.putBoolean(TAG_PLAYER_PROMPT_PENDING, playerPromptPending.get(uuid));
             if (playerPromptIntervals.containsKey(uuid)) playerTag.putInt(TAG_PLAYER_PROMPT_INTERVAL, playerPromptIntervals.get(uuid));
             if (playerNextPromptTimes.containsKey(uuid)) playerTag.putLong(TAG_PLAYER_NEXT_PROMPT_TIME, playerNextPromptTimes.get(uuid));
+            if (playerScrambleStates.containsKey(uuid)) playerTag.putInt(TAG_PLAYER_SCRAMBLE_STATE, playerScrambleStates.get(uuid));
             if (playerThirstLevels.containsKey(uuid)) playerTag.putInt(TAG_PLAYER_THIRST_LEVEL, playerThirstLevels.get(uuid));
             if (playerThirstExhaustion.containsKey(uuid)) playerTag.putFloat(TAG_PLAYER_THIRST_EXHAUSTION, playerThirstExhaustion.get(uuid));
 
@@ -143,6 +144,15 @@ public class WyrSavedData extends SavedData {
         setDirty();
     }
 
+    public int getPlayerScrambleState(UUID uuid) {
+        return playerScrambleStates.getOrDefault(uuid, 0);
+    }
+    public void setPlayerScrambleState(UUID uuid, int state) {
+        if (state > 0) playerScrambleStates.put(uuid, state);
+        else playerScrambleStates.remove(uuid);
+        setDirty();
+    }
+
     public int getPlayerThirst(UUID uuid) { return playerThirstLevels.getOrDefault(uuid, 20); }
     public void setPlayerThirst(UUID uuid, int thirst) { playerThirstLevels.put(uuid, thirst); setDirty(); }
     public float getPlayerThirstExhaustion(UUID uuid) { return playerThirstExhaustion.getOrDefault(uuid, 0.0F); }
@@ -154,12 +164,14 @@ public class WyrSavedData extends SavedData {
     public int getPlayerPromptCount(UUID playerUUID) { return playerPromptCounts.getOrDefault(playerUUID, 0); }
     public void incrementPlayerPromptCount(UUID playerUUID) { playerPromptCounts.put(playerUUID, getPlayerPromptCount(playerUUID) + 1); setDirty(); }
     public void resetShownPairs() { shownChoicePairs.clear(); setDirty(); }
+
     public void clearPlayerChoices(UUID playerUUID) {
         playerChoices.remove(playerUUID);
         playerPromptCounts.remove(playerUUID);
         playerPromptPending.remove(playerUUID);
         playerPromptIntervals.remove(playerUUID);
         playerNextPromptTimes.remove(playerUUID);
+        playerScrambleStates.remove(playerUUID);
         playerThirstLevels.remove(playerUUID);
         playerThirstExhaustion.remove(playerUUID);
         setDirty();

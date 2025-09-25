@@ -1,0 +1,17 @@
+{
+  "values": [
+    "#minecraft:flowers",
+    "#minecraft:wool",
+    "#minecraft:planks",
+    "#minecraft:stone_bricks",
+    "#minecraft:candles",
+    "#minecraft:beds",
+    "#minecraft:banners",
+    "minecraft:glass",
+    "minecraft:painting",
+    "minecraft:item_frame",
+    "minecraft:glow_item_frame",
+    "minecraft:flower_pot",
+    "minecraft:bookshelf"
+  ]
+}

@@ -12,6 +12,17 @@ public class Networking {
     private static void registerPayloads(final RegisterPayloadHandlersEvent event) {
         var registrar = event.registrar(WYR.MODID);
 
+        registrar.playToClient(PacketOpenBiomeGui.TYPE, PacketOpenBiomeGui.STREAM_CODEC, PacketOpenBiomeGui::handle);
+        registrar.playToServer(PacketChooseBiome.TYPE, PacketChooseBiome.STREAM_CODEC, PacketChooseBiome::handle);
+
+        registrar.playToClient(PacketSyncSeeMobHpStatus.TYPE, PacketSyncSeeMobHpStatus.STREAM_CODEC, PacketSyncSeeMobHpStatus::handle);
+
+        registrar.playToClient(PacketSyncScrambleState.TYPE, PacketSyncScrambleState.STREAM_CODEC, PacketSyncScrambleState::handle);
+
+        registrar.playToClient(PacketSyncRandomSoundsStatus.TYPE, PacketSyncRandomSoundsStatus.STREAM_CODEC, PacketSyncRandomSoundsStatus::handle);
+
+        registrar.playToClient(net.coba.wyr.PacketSyncShaderStatus.TYPE, net.coba.wyr.PacketSyncShaderStatus.STREAM_CODEC, net.coba.wyr.PacketSyncShaderStatus::handle);
+
         registrar.playToServer(PacketSetPromptInterval.TYPE, PacketSetPromptInterval.STREAM_CODEC, PacketSetPromptInterval::handle);
 
         registrar.playToServer(PacketTeleport.TYPE, PacketTeleport.STREAM_CODEC, PacketTeleport::handle);

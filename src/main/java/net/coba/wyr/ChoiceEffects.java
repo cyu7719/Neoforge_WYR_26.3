@@ -70,6 +70,7 @@ import net.minecraft.world.item.crafting.RecipeHolder;
 import net.minecraft.world.item.crafting.RecipeType;
 import net.minecraft.world.item.crafting.SmeltingRecipe;
 import net.minecraft.world.level.gameevent.GameEvent;
+import net.minecraft.world.level.storage.loot.parameters.LootContextParams;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
@@ -91,6 +92,11 @@ import net.neoforged.neoforge.network.PacketDistributor;
 import net.neoforged.neoforge.registries.DeferredHolder;
 import net.minecraft.world.entity.animal.Sheep;
 import net.minecraft.world.item.DyeColor;
+import net.neoforged.neoforge.event.entity.item.ItemTossEvent;
+import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.commands.arguments.item.ItemArgument;
+import net.minecraft.commands.arguments.item.ItemInput;
 
 import java.util.stream.Collectors;
 import java.util.*;
@@ -118,6 +124,19 @@ public class ChoiceEffects {
     private static final ResourceLocation WOLF_STRENGTH_MODIFIER_ID = ResourceLocation.fromNamespaceAndPath(WYR.MODID, "wolf_strength");
     private static final ResourceLocation WOLF_SPEED_MODIFIER_ID = ResourceLocation.fromNamespaceAndPath(WYR.MODID, "wolf_speed");
 
+    private static final Map<UUID, Long> keyScrambleTimers = new HashMap<>();
+
+
+    private static final Map<UUID, Integer> talkingVillagerTimers = new HashMap<>();
+    private static final List<String> VILLAGER_PHRASES = List.of(
+            "Hmmph!",
+            "Got any emeralds?",
+            "What a deal!",
+            "Don't touch my crops.",
+            "The bell is about to ring.",
+            "Have you seen the news?"
+    );
+
     private static final Map<DyeColor, Item> WOOL_BY_COLOR = Map.ofEntries(
             Map.entry(DyeColor.WHITE, Items.WHITE_WOOL),
             Map.entry(DyeColor.ORANGE, Items.ORANGE_WOOL),
@@ -136,6 +155,18 @@ public class ChoiceEffects {
             Map.entry(DyeColor.RED, Items.RED_WOOL),
             Map.entry(DyeColor.BLACK, Items.BLACK_WOOL)
     );
+
+    @SubscribeEvent
+    public void onItemToss(ItemTossEvent event) {
+        Player player = event.getPlayer();
+        if (hasEffect(player, "daily_totem_no_armor")) {
+            ItemStack droppedStack = event.getEntity().getItem();
+            CustomData customData = droppedStack.get(DataComponents.CUSTOM_DATA);
+            if (customData != null && customData.copyTag().getBoolean("wyr_locked_totem")) {
+                event.setCanceled(true); // Prevent dropping the locked totem
+            }
+        }
+    }
 
 
     private static Set<String> getActiveEffects(Player player) {
@@ -163,6 +194,29 @@ public class ChoiceEffects {
         var serverPlayer = getServerPlayer(player);
         if (serverPlayer == null) return;
         var enchantRegistry = player.level().holderLookup(Registries.ENCHANTMENT);
+
+        if ("no_hunger_random_shader".equals(effectId)) {
+            if (player instanceof ServerPlayer sp) PacketDistributor.sendToPlayer(sp, new net.coba.wyr.PacketSyncShaderStatus(true));
+        }
+
+        if ("hero_of_village_random_sounds".equals(effectId)) {
+            if (player instanceof ServerPlayer sp) PacketDistributor.sendToPlayer(sp, new PacketSyncRandomSoundsStatus(true));
+        }
+
+        if ("speed_v_random_keys".equals(effectId)) {
+            if (player instanceof ServerPlayer) {
+                // Set the timer for the next scramble
+                keyScrambleTimers.put(player.getUUID(), player.level().getGameTime() + (10 * 60 * 20)); // 10 minutes
+                // Apply the first scramble immediately
+                scrambleKeys(serverPlayer);
+            }
+        }
+
+        if ("choose_spawn_biome_lock".equals(effectId)) {
+            player.level().getBiome(player.blockPosition()).unwrapKey().ifPresent(key -> spawnBiomes.put(player.getUUID(), key));
+            // Send packet to the client to open the GUI
+            PacketDistributor.sendToPlayer(serverPlayer, new PacketOpenBiomeGui());
+        }
 
         // --- ONE-TIME ACTIONS ---
         if ("op_bow_only".equals(effectId)) {
@@ -225,6 +279,15 @@ public class ChoiceEffects {
         reapplyPersistentEffect(player, effectId);
     }
 
+    private static void scrambleKeys(ServerPlayer player) {
+        Random random = new Random();
+        int scrambleState = random.nextInt(4) + 1; // Random state from 1 to 4
+        // Here you would save the state to WyrSavedData
+        // For now, we'll just send it
+        PacketDistributor.sendToPlayer(player, new PacketSyncScrambleState(scrambleState));
+    }
+
+
     public static void reapplyPersistentEffect(Player player, String effectId) {
         var serverPlayer = getServerPlayer(player);
         if (serverPlayer == null) return;
@@ -232,6 +295,14 @@ public class ChoiceEffects {
         Set<String> playerEffects = getActiveEffects(player);
         if (playerEffects.contains(effectId)) return;
         playerEffects.add(effectId);
+
+        if ("speed_v_random_keys".equals(effectId)) {
+            WyrSavedData savedData = WyrSavedData.get(((ServerPlayer)player).serverLevel());
+            int scrambleState = savedData.getPlayerScrambleState(player.getUUID()); // You will need to add this method to WyrSavedData
+            if (player instanceof ServerPlayer) {
+                PacketDistributor.sendToPlayer(serverPlayer, new PacketSyncScrambleState(scrambleState));
+            }
+        }
 
         if ("stacked_logs".equals(effectId)) {
             PacketDistributor.sendToPlayer(serverPlayer, new PacketSyncStackedLogsStatus(true));
@@ -329,6 +400,17 @@ public class ChoiceEffects {
     }
 
     public static void clearAllEffects(Player player) {
+        ServerPlayer serverPlayer = getServerPlayer(player); // Get the ServerPlayer instance
+        if (serverPlayer == null) return;
+
+        if (getActiveEffects(player).contains("no_hunger_random_shader")) {
+            if (serverPlayer != null) PacketDistributor.sendToPlayer(serverPlayer, new net.coba.wyr.PacketSyncShaderStatus(false));
+        }
+
+        if (getActiveEffects(player).contains("hero_of_village_random_sounds")) {
+            PacketDistributor.sendToPlayer(serverPlayer, new PacketSyncRandomSoundsStatus(false));
+        }
+
         if (hasEffect(player, "keep_inventory_berries_only") && player.getServer() != null) {
             boolean anotherPlayerHasEffect = false;
             for (ServerPlayer p : player.getServer().getPlayerList().getPlayers()) {
@@ -341,8 +423,6 @@ public class ChoiceEffects {
                 player.level().getGameRules().getRule(GameRules.RULE_KEEPINVENTORY).set(false, player.getServer());
             }
         }
-
-        ServerPlayer serverPlayer = getServerPlayer(player);
         if (serverPlayer != null) {
             if(getActiveEffects(player).contains("stacked_logs")) {
                 PacketDistributor.sendToPlayer(serverPlayer, new PacketSyncStackedLogsStatus(false));
@@ -379,24 +459,22 @@ public class ChoiceEffects {
         long currentTime = event.getServer().overworld().getGameTime();
         WyrSavedData savedData = WyrSavedData.get(event.getServer().overworld());
 
-        for (ServerPlayer player : event.getServer().getPlayerList().getPlayers()) {
-
-            if (hasEffect(player, "nether_water_fast_lava")) {
-                // Only check every 10 ticks (half a second) to avoid performance issues
-                if (player.tickCount % 10 == 0) {
-                    ServerLevel level = player.serverLevel();
-                    // Check in a 16x16x16 cube around the player
-                    BlockPos.betweenClosedStream(player.blockPosition().offset(-8, -8, -8), player.blockPosition().offset(8, 8, 8))
-                            .forEach(pos -> {
-                                BlockState state = level.getBlockState(pos);
-                                if (state.is(Blocks.LAVA)) {
-                                    // Force the lava block to update (flow) on the next tick
-                                    level.scheduleTick(pos, state.getFluidState().getType(), 1);
-                                }
-                            });
+        // --- Villager Talk Logic ---
+        talkingVillagerTimers.entrySet().removeIf(entry -> {
+            if (entry.getValue() <= 0) {
+                Entity entity = event.getServer().overworld().getEntity(entry.getKey());
+                if (entity instanceof Villager villager) {
+                    villager.setCustomName(null);
+                    villager.setCustomNameVisible(false);
                 }
+                return true;
             }
+            return false;
+        });
+        talkingVillagerTimers.replaceAll((uuid, timer) -> timer - 1);
 
+
+        for (ServerPlayer player : event.getServer().getPlayerList().getPlayers()) {
             int interval = savedData.getPlayerPromptInterval(player.getUUID());
             if (interval > 0 && PlayerChoiceTracker.getPromptCount(player) < 20 && !PlayerChoiceTracker.isPromptPending(player)) {
                 long nextPromptTime = savedData.getNextPromptTime(player.getUUID());
@@ -411,19 +489,37 @@ public class ChoiceEffects {
                 }
             }
 
-            if(hasEffect(player, "fast_smelt_damage")) {
+            if (hasEffect(player, "speed_v_random_keys")) {
+                long nextScrambleTime = keyScrambleTimers.getOrDefault(player.getUUID(), 0L);
+                if (currentTime >= nextScrambleTime) {
+                    scrambleKeys(player);
+                    keyScrambleTimers.put(player.getUUID(), currentTime + (10 * 60 * 20)); // Reset for another 10 minutes
+                }
+            }
+
+            // --- Villager Talk Trigger ---
+            if (hasEffect(player, "villager_talk_no_fence_gates") && player.tickCount % 20 == 0) { // Check once per second
+                if (player.getRandom().nextFloat() < 0.20) { // 20% chance each second
+                    List<Villager> nearbyVillagers = player.level().getEntitiesOfClass(Villager.class, player.getBoundingBox().inflate(32), v -> !talkingVillagerTimers.containsKey(v.getUUID()));
+                    if (!nearbyVillagers.isEmpty()) {
+                        Villager villager = nearbyVillagers.get(player.getRandom().nextInt(nearbyVillagers.size()));
+                        String phrase = VILLAGER_PHRASES.get(player.getRandom().nextInt(VILLAGER_PHRASES.size()));
+                        villager.setCustomName(Component.literal(phrase));
+                        villager.setCustomNameVisible(true);
+                        talkingVillagerTimers.put(villager.getUUID(), 100); // Display for 5 seconds
+                    }
+                }
+            }
+
+            if (hasEffect(player, "fast_smelt_damage")) {
                 if (player.tickCount % 5 == 0) {
                     BlockPos.betweenClosedStream(player.blockPosition().offset(-8, -8, -8), player.blockPosition().offset(8, 8, 8))
                             .forEach(pos -> {
                                 BlockEntity be = player.level().getBlockEntity(pos);
                                 if (be instanceof AbstractFurnaceBlockEntity furnace) {
-                                    // This is a simplified way to speed up smelting. A full implementation is more complex.
-                                    int cookingProgress = furnace.getPersistentData().getInt("CookingProgress");
-                                    int totalTime = furnace.getPersistentData().getInt("CookingTotalTime");
-                                    if (totalTime > 0 && cookingProgress < totalTime) {
-                                        furnace.getPersistentData().putInt("CookingProgress", Math.min(totalTime, cookingProgress + 4));
-                                        if(furnace.getPersistentData().getInt("CookingProgress") >= totalTime) {
-                                            player.hurt(player.damageSources().magic(), player.getMaxHealth() / 2);
+                                    if (furnace.getPersistentData().getInt("litTime") > 0) {
+                                        for (int i = 0; i < 19; i++) {
+                                            AbstractFurnaceBlockEntity.serverTick(player.level(), pos, player.level().getBlockState(pos), furnace);
                                         }
                                     }
                                 }
@@ -434,22 +530,116 @@ public class ChoiceEffects {
     }
 
     @SubscribeEvent
+    public void onPlayerInteractWithVillager(PlayerInteractEvent.EntityInteract event) {
+        if (event.getTarget() instanceof Villager villager && event.getEntity() instanceof Player player) {
+            if (hasEffect(player, "cheap_trades_sink_boats") || hasEffect(player, "cheap_trades_no_ore_drops")) {
+                // This new logic applies a temporary, player-specific discount
+                for (MerchantOffer offer : villager.getOffers()) {
+                    // Calculate the discount needed to make the price 1
+                    int discount = -offer.getCostA().getCount() + 1;
+                    offer.addToSpecialPriceDiff(discount);
+                }
+            }
+        }
+    }
+
+    @SubscribeEvent
     public void onPlayerTick(PlayerTickEvent.Post event) {
         if (event.getEntity().level().isClientSide) return;
         if (!(event.getEntity() instanceof ServerPlayer player)) return;
 
+        if (hasEffect(player, "random_food_no_jump")) {
+            // Apply a jump debuff with a high enough amplifier to make jumping impossible.
+            // The last 'false' argument hides the effect icon from the GUI.
+            player.addEffect(new MobEffectInstance(MobEffects.JUMP, 2, 128, true, false, false));
+        }
+
+        if (hasEffect(player, "no_durability_loss_adventure_mode")) {
+            // Create a list of all items the player is wearing or holding
+            List<ItemStack> equipment = new ArrayList<>();
+            equipment.add(player.getMainHandItem());
+            equipment.add(player.getOffhandItem());
+            player.getInventory().armor.forEach(equipment::add);
+
+            for (ItemStack stack : equipment) {
+                // If the item can be damaged and has taken damage, repair it by 1 point
+                if (stack.isDamageableItem() && stack.getDamageValue() > 0) {
+                    stack.setDamageValue(stack.getDamageValue() - 1);
+                }
+            }
+        }
+
+        if (hasEffect(player, "enchant_level_x_delete_item")) {
+            // Check both inventory and cursor for the marked item
+            List<ItemStack> allItems = new ArrayList<>(player.getInventory().items);
+            allItems.add(player.containerMenu.getCarried());
+
+            for (ItemStack stack : allItems) {
+                if (!stack.isEmpty()) {
+                    CustomData customData = stack.get(DataComponents.CUSTOM_DATA);
+                    // Check if the component exists and has our marker
+                    if (customData != null && customData.copyTag().getBoolean("wyr_delete_item_marker")) {
+                        CompoundTag tag = customData.copyTag();
+                        tag.remove("wyr_delete_item_marker"); // Remove the marker
+                        stack.set(DataComponents.CUSTOM_DATA, CustomData.of(tag)); // Set the data back
+
+                        List<ItemStack> inventoryItems = player.getInventory().items.stream()
+                                .filter(s -> !s.isEmpty() && !s.equals(stack))
+                                .collect(Collectors.toList());
+
+                        if (!inventoryItems.isEmpty()) {
+                            inventoryItems.get(player.getRandom().nextInt(inventoryItems.size())).setCount(0);
+                        }
+                        break;
+                    }
+                }
+            }
+        }
+
+        // --- NEW LOGIC FOR HORSE ---
+        if (hasEffect(player, "fast_horse_dark_fear") && player.level().isNight()) {
+            Horse horse = fastHorses.get(player.getUUID());
+            if (horse != null) {
+                // Stop horse from wandering
+                if (!horse.isLeashed()) {
+                    horse.getNavigation().stop();
+                    horse.setDeltaMovement(0, horse.getDeltaMovement().y, 0);
+                }
+                // Dismount player if they are riding it
+                if (player.isPassenger() && player.getVehicle() == horse) {
+                    player.stopRiding();
+                }
+            }
+        }
+
+
+        if (hasEffect(player, "choose_spawn_biome_lock")) {
+            ResourceKey<net.minecraft.world.level.biome.Biome> spawnBiome = spawnBiomes.get(player.getUUID());
+            if (spawnBiome != null && player.level().getDayTime() < (10 * 24000)) { // 10 Minecraft days
+                player.level().getBiome(player.blockPosition()).unwrapKey().ifPresent(currentBiome -> {
+                    if (currentBiome != spawnBiome) {
+                        BlockPos spawn = player.getRespawnPosition();
+                        if (spawn != null) {
+                            player.teleportTo(spawn.getX(), spawn.getY(), spawn.getZ());
+                            player.sendSystemMessage(Component.literal("You cannot leave your spawn biome yet!"));
+                        }
+                    }
+                });
+            }
+        }
+
         if (hasEffect(player, "unbreakable_tools_netherite") && player.containerMenu instanceof CraftingMenu craftingMenu) {
-            // The 3x3 crafting grid corresponds to slots 1 through 9 in the container menu.
-            // The center slot is index 5.
+            // The 3x3 grid is slots 1-9. The center is slot 5.
             ItemStack centerItem = craftingMenu.getSlot(5).getItem();
 
             boolean patternMatches = !centerItem.isEmpty() && centerItem.isDamageableItem();
             if (patternMatches) {
-                // Check all other grid slots (1-9, skipping 5)
+                // Check all surrounding slots in the 3x3 grid
                 for (int i = 1; i <= 9; i++) {
-                    if (i == 5) continue; // Skip the center
+                    if (i == 5) continue; // Skip the center slot
                     ItemStack slotItem = craftingMenu.getSlot(i).getItem();
-                    if (!slotItem.is(Items.NETHERITE_INGOT) || slotItem.getCount() != 4) {
+                    // Each surrounding slot must contain exactly 4 netherite ingots (32 total)
+                    if (!slotItem.is(Items.NETHERITE_BLOCK) || slotItem.getCount() != 4) {
                         patternMatches = false;
                         break;
                     }
@@ -460,20 +650,21 @@ public class ChoiceEffects {
                 ItemStack unbreakableTool = centerItem.copy();
                 unbreakableTool.set(DataComponents.UNBREAKABLE, new Unbreakable(false));
 
-                // Correctly get the enchantment holder from the registry
+                // Add a glint to make it look special
                 var enchantRegistry = player.level().holderLookup(Registries.ENCHANTMENT);
                 unbreakableTool.enchant(enchantRegistry.getOrThrow(Enchantments.UNBREAKING), 1);
 
-                // Correctly set the result in the public result slot (index 0)
+                // Set the result in the result slot (index 0)
                 craftingMenu.getSlot(0).set(unbreakableTool);
             } else {
-                // If the pattern no longer matches, clear the result slot
+                // If the pattern doesn't match, clear the result slot if it's our special item
                 ItemStack resultItem = craftingMenu.getSlot(0).getItem();
                 if (!resultItem.isEmpty() && resultItem.get(DataComponents.UNBREAKABLE) != null) {
                     craftingMenu.getSlot(0).set(ItemStack.EMPTY);
                 }
             }
         }
+
 
         boolean hasSoundEffect = hasEffect(player, "emeralds_from_mobs_siren") || hasEffect(player, "instant_tame_creeper_hiss") || hasEffect(player, "auto_smelt_random_sound");
         if (hasSoundEffect) {
@@ -588,8 +779,13 @@ public class ChoiceEffects {
             }
         }
         if (hasEffect(player, "cheap_trades_sink_boats") && player.getVehicle() instanceof Boat boat) {
+            // Apply a small downward force to make the boat sink
             boat.setDeltaMovement(boat.getDeltaMovement().add(0, -0.02, 0));
-            ((ServerLevel)player.level()).sendParticles(ParticleTypes.BUBBLE, boat.getX(), boat.getY() + 0.5, boat.getZ(), 5, 0.3, 0.3, 0.3, 0.0);
+
+            // Add some bubble particles to show it's sinking
+            if (player.tickCount % 5 == 0) { // Spawn particles every quarter-second
+                ((ServerLevel)player.level()).sendParticles(ParticleTypes.BUBBLE, boat.getX(), boat.getY() + 0.5, boat.getZ(), 5, 0.3, 0.3, 0.3, 0.0);
+            }
         }
         if (hasEffect(player, "no_hunger_random_shader") || hasEffect(player, "infinite_sprint_no_elytra")) {
             if (player.getFoodData().needsFood()) player.getFoodData().setFoodLevel(20);
@@ -747,31 +943,37 @@ public class ChoiceEffects {
                 event.setCanceled(true);
             }
         }
-        if (hasEffect(player, "luck_ores_one_hp") && player.getHealth() <= 1.0f && isOre(event.getState())) {
-            List<ItemStack> drops = Block.getDrops(event.getState(), serverPlayer.serverLevel(), event.getPos(), null, player, player.getMainHandItem());
-            event.setCanceled(true);
-            player.level().setBlock(event.getPos(), Blocks.AIR.defaultBlockState(), 3);
-            for (ItemStack stack : drops) {
-                stack.setCount(stack.getCount() * 5);
-                Block.popResource(serverPlayer.serverLevel(), event.getPos(), stack);
-            }
-        }
         if (hasEffect(player, "auto_smelt_random_sound") && isOre(event.getState())) {
-            List<ItemStack> drops = Block.getDrops(event.getState(), serverPlayer.serverLevel(), event.getPos(), null, player, player.getMainHandItem());
+            // Cancel the original event so we can control the outcome
             event.setCanceled(true);
+            // Manually break the block
             player.level().setBlock(event.getPos(), Blocks.AIR.defaultBlockState(), 3);
-            for (ItemStack dropStack : drops) {
-                Optional<RecipeHolder<SmeltingRecipe>> recipe = serverPlayer.getServer().getRecipeManager().getRecipeFor(RecipeType.SMELTING, new SingleRecipeInput(dropStack), player.level());
-                if (recipe.isPresent()) {
-                    ItemStack smeltedResult = recipe.get().value().getResultItem(player.level().registryAccess()).copy();
-                    smeltedResult.setCount(dropStack.getCount());
-                    Block.popResource(serverPlayer.serverLevel(), event.getPos(), smeltedResult);
-                } else {
-                    Block.popResource(serverPlayer.serverLevel(), event.getPos(), dropStack);
+
+            // Only process drops and durability if the player is NOT in creative mode
+            if (!player.isCreative()) {
+                List<ItemStack> drops = Block.getDrops(event.getState(), serverPlayer.serverLevel(), event.getPos(), null, player, player.getMainHandItem());
+
+                for (ItemStack dropStack : drops) {
+                    Optional<RecipeHolder<SmeltingRecipe>> recipe = serverPlayer.getServer().getRecipeManager().getRecipeFor(RecipeType.SMELTING, new SingleRecipeInput(dropStack), player.level());
+
+                    if (recipe.isPresent()) {
+                        ItemStack smeltedResult = recipe.get().value().getResultItem(player.level().registryAccess()).copy();
+                        smeltedResult.setCount(dropStack.getCount());
+                        Block.popResource(serverPlayer.serverLevel(), event.getPos(), smeltedResult);
+                    } else {
+                        Block.popResource(serverPlayer.serverLevel(), event.getPos(), dropStack);
+                    }
                 }
+
+                // Manually apply durability damage to the tool
+                ItemStack tool = player.getMainHandItem();
+                if (tool.isDamageableItem()) {
+                    tool.hurtAndBreak(1, player, EquipmentSlot.MAINHAND);
+                }
+
+                player.giveExperiencePoints(1);
             }
-            player.giveExperiencePoints(1);
-            return;
+            return; // Stop processing
         }
         if (hasEffect(player, "cheap_trades_no_ore_drops") && isOre(event.getState())) {
             event.setCanceled(true);
@@ -791,6 +993,11 @@ public class ChoiceEffects {
     public void onRightClickBlock(PlayerInteractEvent.RightClickBlock event) {
         Player player = event.getEntity();
         BlockState state = player.level().getBlockState(event.getPos());
+
+        if (hasEffect(player, "villager_talk_no_fence_gates") && state.is(BlockTags.FENCE_GATES)) {
+            event.setCanceled(true);
+            return;
+        }
 
         if (hasEffect(player, "build_limit_638_top_bottom_only")) {
             // Check if the player is holding a block to prevent canceling other right-click actions
@@ -824,6 +1031,35 @@ public class ChoiceEffects {
     @SubscribeEvent
     public void onAnvilUpdate(AnvilUpdateEvent event) {
         Player player = event.getPlayer();
+        if (hasEffect(player, "enchant_level_x_delete_item")) {
+            ItemStack left = event.getLeft();
+            ItemStack right = event.getRight();
+            var leftEnchants = EnchantmentHelper.getEnchantmentsForCrafting(left);
+            var rightEnchants = EnchantmentHelper.getEnchantmentsForCrafting(right);
+
+            for (Map.Entry<Holder<Enchantment>, Integer> entry : rightEnchants.entrySet()) {
+                Holder<Enchantment> ench = entry.getKey();
+                int rightLevel = entry.getValue();
+                int leftLevel = leftEnchants.getLevel(ench);
+
+                // FIX: This condition now correctly caps the level at max + 1
+                if (leftLevel == rightLevel && leftLevel == ench.value().getMaxLevel()) {
+                    ItemStack output = left.copy();
+                    EnchantmentHelper.updateEnchantments(output, (builder) -> builder.set(ench, leftLevel + 1));
+
+                    CustomData customData = output.getOrDefault(DataComponents.CUSTOM_DATA, CustomData.EMPTY);
+                    CompoundTag tag = customData.copyTag();
+
+                    // Add a special tag to the item so we know when to delete another item
+                    tag.putBoolean("wyr_delete_item_marker", true);
+
+                    event.setOutput(output);
+                    event.setCost(10); // Set a cost for the operation
+                    return;
+                }
+            }
+        }
+        // ... (rest of the anvil logic remains)
         if (hasEffect(player, "triple_ores")) {
             if (event.getRight().getItem() instanceof EnchantedBookItem) event.setCanceled(true);
         }
@@ -833,22 +1069,14 @@ public class ChoiceEffects {
             if (enchantments.keySet().stream().anyMatch(h -> h.is(Enchantments.MENDING))) event.setCanceled(true);
         }
         if (hasEffect(player, "stacked_logs") && event.getLeft().getItem() instanceof AxeItem) event.setCanceled(true);
-        if (hasEffect(player, "enchant_level_x_delete_item")) {
-            ItemStack left = event.getLeft();
-            ItemStack right = event.getRight();
-            var leftEnchants = EnchantmentHelper.getEnchantmentsForCrafting(left);
-            var rightEnchants = EnchantmentHelper.getEnchantmentsForCrafting(right);
-            for (Map.Entry<Holder<Enchantment>, Integer> entry : rightEnchants.entrySet()) {
-                Holder<Enchantment> ench = entry.getKey();
-                int rightLevel = entry.getValue();
-                int leftLevel = leftEnchants.getLevel(ench);
-                if (leftLevel == rightLevel && leftLevel >= ench.value().getMaxLevel()) {
-                    ItemStack output = left.copy();
-                    EnchantmentHelper.updateEnchantments(output, (builder) -> builder.set(ench, leftLevel + 1));
-                    event.setOutput(output);
-                    event.setCost(5);
-                }
-            }
+    }
+
+    // Add this new event handler method
+    @SubscribeEvent
+    public void onItemSmelted(PlayerEvent.ItemSmeltedEvent event) {
+        if (hasEffect(event.getEntity(), "fast_smelt_damage")) {
+            // Deal half a heart of damage
+            event.getEntity().hurt(event.getEntity().damageSources().magic(), 1.0F);
         }
     }
 
@@ -858,6 +1086,24 @@ public class ChoiceEffects {
 
         ItemStack item = event.getItem();
         FoodProperties food = item.get(DataComponents.FOOD);
+
+        if (hasEffect(player, "eat_anything_hunger_chance") && food == null) {
+            // Restore 1 hunger and 1 saturation
+            player.getFoodData().eat(1, 1.0F);
+
+            // 10% chance to get Hunger effect
+            if (player.getRandom().nextFloat() < 0.1) {
+                player.addEffect(new MobEffectInstance(MobEffects.HUNGER, 600, 0));
+            }
+
+            // Manually consume one item
+            if (!player.isCreative()) {
+                ItemStack result = event.getItem().copy();
+                result.shrink(1);
+                event.setResultStack(result);
+            }
+            return; // Stop processing to prevent other effects from triggering on this non-food item
+        }
 
         if (hasEffect(player, "double_food_no_hunger_bar") && food != null) {
             player.getFoodData().eat(food.nutrition(), food.saturation());
@@ -896,6 +1142,13 @@ public class ChoiceEffects {
     public void onPlayerUseItemStart(LivingEntityUseItemEvent.Start event) {
         if (event.getEntity() instanceof Player player) {
             ItemStack itemStack = event.getItem();
+            if (hasEffect(player, "keep_inventory_berries_only")) {
+                // Check if the item is food, but is NOT sweet berries
+                if (itemStack.get(DataComponents.FOOD) != null && !itemStack.is(Items.SWEET_BERRIES)) {
+                    event.setCanceled(true); // Cancel the eating action
+                    return; // Stop processing
+                }
+            }
             if (hasEffect(player, "insta_grow_bread_only") && itemStack.get(DataComponents.FOOD) != null && !itemStack.is(Items.BREAD)) {
                 event.setCanceled(true);
             }
@@ -1055,17 +1308,18 @@ public class ChoiceEffects {
 
     @SubscribeEvent
     public void onEntityJoinWorld(EntityJoinLevelEvent event) {
-        if (event.getEntity() instanceof Monster monster) {
-            monster.level().players().forEach(player -> {
+        // Apply 2x health to ALL living entities except other players
+        if (event.getEntity() instanceof LivingEntity entity && !(entity instanceof Player)) {
+            entity.level().players().forEach(player -> {
                 if (hasEffect(player, "see_mob_hp_double_health") || hasEffect(player, "triple_loot_triple_health")) {
-                    AttributeInstance health = monster.getAttribute(Attributes.MAX_HEALTH);
+                    AttributeInstance health = entity.getAttribute(Attributes.MAX_HEALTH);
                     if (health != null) {
                         ResourceLocation modifierId = ResourceLocation.fromNamespaceAndPath(WYR.MODID, "health_mod_" + player.getUUID());
                         health.removeModifier(modifierId);
                         double multiplier = hasEffect(player, "triple_loot_triple_health") ? 2.0 : 1.0;
                         if (hasEffect(player, "half_health_mobs_no_drops")) multiplier = -0.5;
                         health.addPermanentModifier(new AttributeModifier(modifierId, multiplier, AttributeModifier.Operation.ADD_MULTIPLIED_TOTAL));
-                        monster.setHealth(monster.getMaxHealth());
+                        entity.setHealth(entity.getMaxHealth());
                     }
                 }
             });
@@ -1074,14 +1328,23 @@ public class ChoiceEffects {
 
     @SubscribeEvent
     public void onAnimalTame(AnimalTameEvent event) {
-        if(event.getTamer() instanceof Player player && event.getAnimal() instanceof Wolf wolf && hasEffect(player, "strong_wolves_one_hp")) {
+        if (event.getTamer() instanceof Player player && event.getAnimal() instanceof Wolf wolf && hasEffect(player, "strong_wolves_one_hp")) {
             AttributeInstance health = wolf.getAttribute(Attributes.MAX_HEALTH);
-            if (health != null) health.addPermanentModifier(new AttributeModifier(WOLF_HEALTH_MODIFIER_ID, -health.getBaseValue() + 1, AttributeModifier.Operation.ADD_VALUE));
-            AttributeInstance damage = wolf.getAttribute(Attributes.ATTACK_DAMAGE);
-            if (damage != null) damage.addPermanentModifier(new AttributeModifier(WOLF_STRENGTH_MODIFIER_ID, 4.0, AttributeModifier.Operation.ADD_MULTIPLIED_BASE));
-            AttributeInstance speed = wolf.getAttribute(Attributes.MOVEMENT_SPEED);
-            if (speed != null) speed.addPermanentModifier(new AttributeModifier(WOLF_SPEED_MODIFIER_ID, 2.0, AttributeModifier.Operation.ADD_MULTIPLIED_BASE));
+            if (health != null) {
+                health.addPermanentModifier(new AttributeModifier(WOLF_HEALTH_MODIFIER_ID, -health.getBaseValue() + 1, AttributeModifier.Operation.ADD_VALUE));
+            }
+            // Set the wolf's current health to 1 HP
             wolf.setHealth(1.0f);
+
+            // Keep the strength and speed boosts
+            AttributeInstance damage = wolf.getAttribute(Attributes.ATTACK_DAMAGE);
+            if (damage != null) {
+                damage.addPermanentModifier(new AttributeModifier(WOLF_STRENGTH_MODIFIER_ID, 4.0, AttributeModifier.Operation.ADD_MULTIPLIED_BASE));
+            }
+            AttributeInstance speed = wolf.getAttribute(Attributes.MOVEMENT_SPEED);
+            if (speed != null) {
+                speed.addPermanentModifier(new AttributeModifier(WOLF_SPEED_MODIFIER_ID, 2.0, AttributeModifier.Operation.ADD_MULTIPLIED_BASE));
+            }
         }
     }
 
@@ -1146,42 +1409,128 @@ public class ChoiceEffects {
         }
     }
 
+    private List<BlockPos> findVein(Level level, BlockPos startPos, Block startBlock) {
+        List<BlockPos> vein = new ArrayList<>();
+        Queue<BlockPos> toCheck = new LinkedList<>();
+        Set<BlockPos> checked = new HashSet<>();
+        int maxVeinSize = 100; // Safety limit to prevent lag
+
+        toCheck.add(startPos);
+        checked.add(startPos);
+
+        while (!toCheck.isEmpty() && vein.size() < maxVeinSize) {
+            BlockPos currentPos = toCheck.poll();
+            if (level.getBlockState(currentPos).is(startBlock)) {
+                vein.add(currentPos);
+                for (BlockPos neighbor : BlockPos.betweenClosed(currentPos.offset(-1, -1, -1), currentPos.offset(1, 1, 1))) {
+                    if (!checked.contains(neighbor)) {
+                        toCheck.add(neighbor.immutable());
+                        checked.add(neighbor.immutable());
+                    }
+                }
+            }
+        }
+        return vein;
+    }
+
     @SubscribeEvent
     public void onBonemeal(BonemealEvent event) {
         Player player = event.getPlayer();
         Level level = event.getLevel();
         BlockPos pos = event.getPos();
-        BlockState state = level.getBlockState(pos);
 
-        if (hasEffect(player, "bonemeal_ores_cobblestone") && isOre(state)) {
+        if (hasEffect(player, "bonemeal_ores_cobblestone") && isOre(level.getBlockState(pos))) {
             if (level.isClientSide) return;
-            if (player.getRandom().nextFloat() < 0.5) {
-                level.setBlock(pos, Blocks.COBBLESTONE.defaultBlockState(), 3);
+
+            event.setCanceled(true);
+            if (!player.isCreative()) {
+                event.getStack().shrink(1);
+            }
+
+            Block oreBlock = level.getBlockState(pos).getBlock();
+            List<BlockPos> vein = findVein(level, pos, oreBlock);
+
+            if (player.getRandom().nextFloat() < 0.5) { // 50% chance of failure
+                // Failure: Replace the entire vein with cobblestone
+                vein.forEach(veinPos -> level.setBlock(veinPos, Blocks.COBBLESTONE.defaultBlockState(), 3));
             } else {
-                for (Direction dir : Direction.values()) {
-                    BlockPos adjacent = pos.relative(dir);
-                    if (level.getBlockState(adjacent).is(BlockTags.BASE_STONE_OVERWORLD)) {
-                        level.setBlock(adjacent, state, 3);
+                // Success: Find potential spots to add new ore
+                Set<BlockPos> potentialSpots = new HashSet<>();
+                for (BlockPos veinPos : vein) {
+                    for (Direction dir : Direction.values()) {
+                        BlockPos adjacent = veinPos.relative(dir);
+                        if (level.isEmptyBlock(adjacent) || level.getBlockState(adjacent).is(BlockTags.BASE_STONE_OVERWORLD)) {
+                            potentialSpots.add(adjacent);
+                        }
                     }
                 }
+
+                List<BlockPos> spotsToPlace = new ArrayList<>(potentialSpots);
+                Collections.shuffle(spotsToPlace);
+
+                // Place up to 4 new ore blocks
+                for (int i = 0; i < 4 && i < spotsToPlace.size(); i++) {
+                    level.setBlock(spotsToPlace.get(i), oreBlock.defaultBlockState(), 3);
+                }
             }
-            event.getStack().shrink(1);
-            event.setCanceled(true);
             return;
         }
-        if (hasEffect(player, "insta_grow_bread_only")) {
-            if (state.getBlock() instanceof BonemealableBlock bonemealable && bonemealable.isValidBonemealTarget(level, pos, state)) {
-                if (level instanceof ServerLevel serverLevel) bonemealable.performBonemeal(serverLevel, player.getRandom(), pos, state);
+
+        if (hasEffect(player, "insta_grow_bread_only") && !level.isClientSide) {
+            BlockState state = level.getBlockState(pos);
+            Block block = state.getBlock();
+            if (block instanceof SaplingBlock || block instanceof CropBlock) {
                 event.setCanceled(true);
+                if (block instanceof BonemealableBlock bonemealable) {
+                    while (bonemealable.isValidBonemealTarget(level, pos, level.getBlockState(pos))) {
+                        bonemealable.performBonemeal((ServerLevel) level, player.getRandom(), pos, level.getBlockState(pos));
+                    }
+                }
+                if (!player.isCreative()) {
+                    event.getStack().shrink(1);
+                }
             }
         }
     }
 
     @SubscribeEvent
     public void onCommand(CommandEvent event) {
-        if(event.getParseResults().getContext().getSource().getEntity() instanceof Player player) {
-            String command = event.getParseResults().getReader().getString();
-            if (hasEffect(player, "weather_control_creeper") && command.startsWith("weather")) {
+        if (event.getParseResults().getContext().getSource().getEntity() instanceof ServerPlayer player) {
+            String commandName = event.getParseResults().getContext().getRootNode().getName();
+
+            if (hasEffect(player, "give_decoration_blind") && commandName.equals("give")) {
+                // Cancel the original command to bypass the permission check
+                event.setCanceled(true);
+
+                try {
+                    // Manually parse the arguments the player provided
+                    CommandContext<CommandSourceStack> context = event.getParseResults().getContext().build(event.getParseResults().getReader().getString());
+                    ItemInput itemInput = context.getArgument("item", ItemInput.class);
+                    int count = 1;
+                    try {
+                        count = context.getArgument("count", Integer.class);
+                    } catch (IllegalArgumentException e) {
+                        // Count is optional, defaults to 1
+                    }
+
+                    ItemStack stackToGive = itemInput.createItemStack(count, false);
+
+                    // Check if the item is in our custom tag
+                    if (stackToGive.is(ModTags.Items.DECORATION_ITEMS)) {
+                        // Success: Give the item and send a success message
+                        player.getInventory().add(stackToGive.copy());
+                        player.sendSystemMessage(Component.literal("Gave " + stackToGive.getCount() + " [" + stackToGive.getHoverName().getString() + "] to " + player.getName().getString()));
+                    } else {
+                        // Failure: Item is not a decoration, send an error message
+                        player.sendSystemMessage(Component.literal("You can only /give yourself decoration items."));
+                    }
+                } catch (Exception e) {
+                    // The command was likely malformed, send a vanilla-like error
+                    player.sendSystemMessage(Component.literal("Invalid command syntax."));
+                }
+            }
+
+            if (hasEffect(player, "weather_control_creeper") && commandName.equals("weather")) {
                 Creeper creeper = EntityType.CREEPER.create(player.level());
                 if (creeper != null) {
                     creeper.setPos(player.position());

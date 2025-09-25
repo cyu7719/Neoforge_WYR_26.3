@@ -1,5 +1,6 @@
 package net.coba.wyr.item;
 
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.LivingEntity;
@@ -8,6 +9,7 @@ import net.minecraft.world.food.FoodProperties;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
+import net.neoforged.neoforge.network.PacketDistributor;
 
 public class UnlimitedIceCreamItem extends Item {
     public UnlimitedIceCreamItem(Properties properties) {
@@ -29,7 +31,7 @@ public class UnlimitedIceCreamItem extends Item {
             }
 
             // You would send a packet to the client here to trigger the powder snow overlay effect
-            // PacketDistributor.sendToPlayer((ServerPlayer) player, new PacketApplyBrainFreezeOverlay());
+            //PacketDistributor.sendToPlayer((ServerPlayer) player, new PacketApplyBrainFreezeOverlay());
         }
         // Return the original stack to prevent consumption
         return stack;

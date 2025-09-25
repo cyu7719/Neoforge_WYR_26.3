@@ -11,6 +11,8 @@ import java.util.List;
 import java.util.Objects;
 import java.util.stream.Collectors;
 
+import static net.coba.wyr.ClientEffectCache.hasRandomSounds;
+
 public class PlayerChoiceTracker {
 
     private static WyrSavedData getSavedData(ServerPlayer player) {
@@ -57,14 +59,32 @@ public class PlayerChoiceTracker {
         if (event.getEntity() instanceof ServerPlayer player) {
             List<Choice> choices = getChoices(player);
             boolean hasStackedLogs = false;
+            boolean hasSeeMobHp = false;
+            boolean hasRandomSounds = false;
+            boolean hasRandomShader = false;
+
             for (Choice choice : choices) {
+
+                if ("no_hunger_random_shader".equals(choice.getId())) hasRandomShader = true;
+
+                if ("hero_of_village_random_sounds".equals(choice.getId())) {
+                    hasRandomSounds = true;
+                }
+
                 // MODIFICATION: Call the reapply method to avoid giving items again
                 ChoiceEffects.reapplyPersistentEffect(player, choice.getId());
                 if ("stacked_logs".equals(choice.getId())) {
                     hasStackedLogs = true;
                 }
+                if ("see_mob_hp_double_health".equals(choice.getId())) {
+                    hasSeeMobHp = true;
+                }
             }
+
+            PacketDistributor.sendToPlayer(player, new PacketSyncRandomSoundsStatus(hasRandomSounds));
             PacketDistributor.sendToPlayer(player, new PacketSyncStackedLogsStatus(hasStackedLogs));
+            PacketDistributor.sendToPlayer(player, new PacketSyncSeeMobHpStatus(hasSeeMobHp));
+            PacketDistributor.sendToPlayer(player, new net.coba.wyr.PacketSyncShaderStatus(hasRandomShader));
 
             if (isPromptPending(player)) {
                 List<Choice> newChoices = ChoiceRegistry.getFilteredRandomChoicesForPlayer(player);
