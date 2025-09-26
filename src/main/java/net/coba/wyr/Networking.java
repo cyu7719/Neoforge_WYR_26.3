@@ -23,6 +23,11 @@ public class Networking {
 
         registrar.playToClient(net.coba.wyr.PacketSyncShaderStatus.TYPE, net.coba.wyr.PacketSyncShaderStatus.STREAM_CODEC, net.coba.wyr.PacketSyncShaderStatus::handle);
 
+        registrar.playToClient(PacketSyncFovChangeStatus.TYPE, PacketSyncFovChangeStatus.STREAM_CODEC, PacketSyncFovChangeStatus::handle);
+        registrar.playToClient(PacketSyncRenderDistanceStatus.TYPE, PacketSyncRenderDistanceStatus.STREAM_CODEC, PacketSyncRenderDistanceStatus::handle);
+
+        registrar.playToClient(PacketSyncMuteStatus.TYPE, PacketSyncMuteStatus.STREAM_CODEC, PacketSyncMuteStatus::handle);
+
         registrar.playToServer(PacketSetPromptInterval.TYPE, PacketSetPromptInterval.STREAM_CODEC, PacketSetPromptInterval::handle);
 
         registrar.playToServer(PacketTeleport.TYPE, PacketTeleport.STREAM_CODEC, PacketTeleport::handle);

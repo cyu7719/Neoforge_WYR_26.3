@@ -31,10 +31,7 @@ import net.minecraft.world.InteractionHand;
 import net.minecraft.world.effect.MobEffect;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.effect.MobEffects;
-import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.EntityType;
-import net.minecraft.world.entity.EquipmentSlot;
-import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.*;
 import net.minecraft.world.entity.ai.attributes.AttributeInstance;
 import net.minecraft.world.entity.ai.attributes.AttributeModifier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
@@ -83,6 +80,7 @@ import net.neoforged.neoforge.event.entity.EntityJoinLevelEvent;
 import net.neoforged.neoforge.event.entity.living.*;
 import net.neoforged.neoforge.event.entity.player.*;
 import net.neoforged.neoforge.event.level.BlockEvent;
+import net.neoforged.neoforge.event.level.ExplosionEvent;
 import net.neoforged.neoforge.event.server.ServerStartingEvent;
 import net.neoforged.neoforge.event.tick.PlayerTickEvent;
 import net.neoforged.neoforge.event.tick.ServerTickEvent;
@@ -97,6 +95,9 @@ import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.arguments.item.ItemArgument;
 import net.minecraft.commands.arguments.item.ItemInput;
+import net.neoforged.bus.api.Event;
+import net.neoforged.neoforge.event.entity.EntityEvent;
+import net.minecraft.world.entity.EntityDimensions;
 
 import java.util.stream.Collectors;
 import java.util.*;
@@ -134,7 +135,49 @@ public class ChoiceEffects {
             "What a deal!",
             "Don't touch my crops.",
             "The bell is about to ring.",
-            "Have you seen the news?"
+            "Have you seen the news?",
+            "Michael D is a noob",
+            "You're trash",
+            "Get lost kid",
+            "Get over here",
+            "I'm sexy and I know it",
+            "You're dogwater",
+            "Skibidi Toilet",
+            "That's cap",
+            "Yolo",
+            "TTYL",
+            "Bye Felicia",
+            "Why you always lying",
+            "are you sure about that",
+            "Hide your kids, hide you wife",
+            "I like trains",
+            "Get good",
+            "Look at this dude",
+            "Get a room",
+            "Suck it",
+            "Let him cook",
+            "I like to move it move it",
+            "I'm fast as F**K boi",
+            "Look at me now",
+            "Mom Spaghetti",
+            "Get rekted nerd",
+            "Missed me",
+            "Over and out",
+            "Fr e sha  voca do",
+            "You shall not pass",
+            "May the force be with you",
+            "Heres Johnny",
+            "Nice work kid",
+            "Michael D is such a fine young man",
+            "I'm a bad guy",
+            "Frankly, my dear, I don't give a d**m",
+            "I'm gonna make him an offer he can't refuse",
+            "There's no place like home",
+            "ou talkin' to me",
+            "You had me at 'hello",
+            "I'll be back",
+            "You can't handle the truth!",
+            "Louis, I think this is the beginning of a beautiful friendship"
     );
 
     private static final Map<DyeColor, Item> WOOL_BY_COLOR = Map.ofEntries(
@@ -155,6 +198,16 @@ public class ChoiceEffects {
             Map.entry(DyeColor.RED, Items.RED_WOOL),
             Map.entry(DyeColor.BLACK, Items.BLACK_WOOL)
     );
+
+    @SubscribeEvent
+    public void onEntitySize(EntityEvent.Size event) {
+        if (event.getEntity() instanceof Player player && hasEffect(player, "fast_climb_short")) {
+            EntityDimensions originalDimensions = player.getDimensions(player.getPose());
+            EntityDimensions newDimensions = originalDimensions.scale(1.0F, 0.5F);
+            // The correct method is setNewSize()
+            event.setNewSize(newDimensions);
+        }
+    }
 
     @SubscribeEvent
     public void onItemToss(ItemTossEvent event) {
@@ -194,6 +247,17 @@ public class ChoiceEffects {
         var serverPlayer = getServerPlayer(player);
         if (serverPlayer == null) return;
         var enchantRegistry = player.level().holderLookup(Registries.ENCHANTMENT);
+
+        if ("fast_swim_muted".equals(effectId)) {
+            if (player instanceof ServerPlayer sp) PacketDistributor.sendToPlayer(sp, new PacketSyncMuteStatus(true));
+        }
+
+        if ("sneak_bonemeal_fov_change".equals(effectId)) {
+            if (player instanceof ServerPlayer sp) PacketDistributor.sendToPlayer(sp, new PacketSyncFovChangeStatus(true));
+        }
+        if ("no_fall_damage_low_render_distance".equals(effectId)) {
+            if (player instanceof ServerPlayer sp) PacketDistributor.sendToPlayer(sp, new PacketSyncRenderDistanceStatus(true));
+        }
 
         if ("no_hunger_random_shader".equals(effectId)) {
             if (player instanceof ServerPlayer sp) PacketDistributor.sendToPlayer(sp, new net.coba.wyr.PacketSyncShaderStatus(true));
@@ -296,6 +360,10 @@ public class ChoiceEffects {
         if (playerEffects.contains(effectId)) return;
         playerEffects.add(effectId);
 
+        if ("fast_climb_short".equals(effectId)) {
+            player.refreshDimensions();
+        }
+
         if ("speed_v_random_keys".equals(effectId)) {
             WyrSavedData savedData = WyrSavedData.get(((ServerPlayer)player).serverLevel());
             int scrambleState = savedData.getPlayerScrambleState(player.getUUID()); // You will need to add this method to WyrSavedData
@@ -377,6 +445,7 @@ public class ChoiceEffects {
 
         ServerPlayer serverPlayer = getServerPlayer(player);
         if (serverPlayer != null) {
+            serverPlayer.refreshDimensions();
             AttributeInstance maxHealth = serverPlayer.getAttribute(Attributes.MAX_HEALTH);
             if (maxHealth != null) {
                 maxHealth.removeModifier(INSTA_HEAL_HEALTH_MODIFIER_ID);
@@ -399,9 +468,22 @@ public class ChoiceEffects {
         }
     }
 
+    @SubscribeEvent
+    public void onBreakSpeed(PlayerEvent.BreakSpeed event) {
+        // Check if the player has the effect and is breaking an ore
+        if (hasEffect(event.getEntity(), "hidden_from_mobs_slow_ores") && isOre(event.getState())) {
+            // Set the new mining speed to half of the original
+            event.setNewSpeed(event.getOriginalSpeed() / 2.0F);
+        }
+    }
+
     public static void clearAllEffects(Player player) {
         ServerPlayer serverPlayer = getServerPlayer(player); // Get the ServerPlayer instance
         if (serverPlayer == null) return;
+
+        if (getActiveEffects(player).contains("fast_swim_muted")) {
+            if (serverPlayer != null) PacketDistributor.sendToPlayer(serverPlayer, new PacketSyncMuteStatus(false));
+        }
 
         if (getActiveEffects(player).contains("no_hunger_random_shader")) {
             if (serverPlayer != null) PacketDistributor.sendToPlayer(serverPlayer, new net.coba.wyr.PacketSyncShaderStatus(false));
@@ -489,16 +571,61 @@ public class ChoiceEffects {
                 }
             }
 
+            if (player.tickCount % 40 == 0) {
+                boolean hasEffect = hasEffect(player, "strong_wolves_one_hp");
+                // Find all tamed wolves owned by this player
+                List<Wolf> wolves = player.level().getEntitiesOfClass(Wolf.class, player.getBoundingBox().inflate(128),
+                        wolf -> wolf.isTame() && player.getUUID().equals(wolf.getOwnerUUID()));
+
+                for (Wolf wolf : wolves) {
+                    boolean isModified = wolf.getPersistentData().getBoolean("wyr_wolf_modified");
+                    AttributeInstance health = wolf.getAttribute(Attributes.MAX_HEALTH);
+                    AttributeInstance damage = wolf.getAttribute(Attributes.ATTACK_DAMAGE);
+                    AttributeInstance speed = wolf.getAttribute(Attributes.MOVEMENT_SPEED);
+                    if (health == null || damage == null || speed == null) continue;
+
+                    if (hasEffect && !isModified) {
+                        // Apply the 1HP effect
+                        health.addPermanentModifier(new AttributeModifier(WOLF_HEALTH_MODIFIER_ID, -health.getBaseValue() + 1, AttributeModifier.Operation.ADD_VALUE));
+                        damage.addPermanentModifier(new AttributeModifier(WOLF_STRENGTH_MODIFIER_ID, 4.0, AttributeModifier.Operation.ADD_MULTIPLIED_BASE));
+                        speed.addPermanentModifier(new AttributeModifier(WOLF_SPEED_MODIFIER_ID, 2.0, AttributeModifier.Operation.ADD_MULTIPLIED_BASE));
+                        wolf.setHealth(1.0f);
+                        wolf.getPersistentData().putBoolean("wyr_wolf_modified", true);
+                    } else if (!hasEffect && isModified) {
+                        // Remove the effect and restore health
+                        health.removeModifier(WOLF_HEALTH_MODIFIER_ID);
+                        damage.removeModifier(WOLF_STRENGTH_MODIFIER_ID);
+                        speed.removeModifier(WOLF_SPEED_MODIFIER_ID);
+                        wolf.setHealth(wolf.getMaxHealth());
+                        wolf.getPersistentData().remove("wyr_wolf_modified");
+                    }
+                }
+            }
+
+            if (hasEffect(player, "nether_water_fast_lava")) {
+                if (player.tickCount % 10 == 0) { // Check every half-second to avoid lag
+                    ServerLevel level = player.serverLevel();
+                    BlockPos.betweenClosedStream(player.blockPosition().offset(-8, -8, -8), player.blockPosition().offset(8, 8, 8))
+                            .forEach(pos -> {
+                                BlockState state = level.getBlockState(pos);
+                                if (state.is(Blocks.LAVA)) {
+                                    // Force the lava to update (flow) very quickly
+                                    level.scheduleTick(pos, state.getFluidState().getType(), 1);
+                                }
+                            });
+                }
+            }
+
             if (hasEffect(player, "speed_v_random_keys")) {
                 long nextScrambleTime = keyScrambleTimers.getOrDefault(player.getUUID(), 0L);
                 if (currentTime >= nextScrambleTime) {
                     scrambleKeys(player);
-                    keyScrambleTimers.put(player.getUUID(), currentTime + (10 * 60 * 20)); // Reset for another 10 minutes
+                    keyScrambleTimers.put(player.getUUID(), currentTime + (10 * 60 * 20));
                 }
             }
 
             // --- Villager Talk Trigger ---
-            if (hasEffect(player, "villager_talk_no_fence_gates") && player.tickCount % 20 == 0) { // Check once per second
+            if (hasEffect(player, "villager_talk_no_fence_gates") && player.tickCount % 20 == 0) {
                 if (player.getRandom().nextFloat() < 0.20) { // 20% chance each second
                     List<Villager> nearbyVillagers = player.level().getEntitiesOfClass(Villager.class, player.getBoundingBox().inflate(32), v -> !talkingVillagerTimers.containsKey(v.getUUID()));
                     if (!nearbyVillagers.isEmpty()) {
@@ -506,7 +633,7 @@ public class ChoiceEffects {
                         String phrase = VILLAGER_PHRASES.get(player.getRandom().nextInt(VILLAGER_PHRASES.size()));
                         villager.setCustomName(Component.literal(phrase));
                         villager.setCustomNameVisible(true);
-                        talkingVillagerTimers.put(villager.getUUID(), 100); // Display for 5 seconds
+                        talkingVillagerTimers.put(villager.getUUID(), 100);
                     }
                 }
             }
@@ -532,6 +659,11 @@ public class ChoiceEffects {
     @SubscribeEvent
     public void onPlayerInteractWithVillager(PlayerInteractEvent.EntityInteract event) {
         if (event.getTarget() instanceof Villager villager && event.getEntity() instanceof Player player) {
+
+            if (player.level().isClientSide) {
+                return;
+            }
+
             if (hasEffect(player, "cheap_trades_sink_boats") || hasEffect(player, "cheap_trades_no_ore_drops")) {
                 // This new logic applies a temporary, player-specific discount
                 for (MerchantOffer offer : villager.getOffers()) {
@@ -544,9 +676,59 @@ public class ChoiceEffects {
     }
 
     @SubscribeEvent
+    public void onItemCrafted(PlayerEvent.ItemCraftedEvent event) {
+        // Check if the crafted item is our special unbreakable tool
+        if (event.getCrafting().get(DataComponents.UNBREAKABLE) != null &&
+                event.getCrafting().getOrDefault(DataComponents.ENCHANTMENT_GLINT_OVERRIDE, false)) {
+
+            // If it is, check if the player has the effect
+            if (hasEffect(event.getEntity(), "unbreakable_tools_netherite")) {
+                // Clear all items from the crafting grid
+                event.getInventory().clearContent();
+            }
+        }
+    }
+
+    @SubscribeEvent
     public void onPlayerTick(PlayerTickEvent.Post event) {
         if (event.getEntity().level().isClientSide) return;
         if (!(event.getEntity() instanceof ServerPlayer player)) return;
+
+        if (hasEffect(player, "lava_fishing_rod")) {
+            // Check if the player has a fishing bobber cast
+            if (player.fishing != null) {
+                // If the bobber is in water, immediately retract it
+                if (player.fishing.isInWater()) {
+                    player.fishing.discard(); // Removes the bobber entity
+                }
+            }
+        }
+
+        if (hasEffect(player, "infinite_sprint_no_elytra")) {
+            ItemStack chestItem = player.getItemBySlot(EquipmentSlot.CHEST);
+            if (chestItem.is(Items.ELYTRA)) {
+                // --- THIS IS THE FIXED LINE ---
+                // The chestplate is index 2 in the armor list
+                player.getInventory().armor.set(2, ItemStack.EMPTY);
+
+                // Try to add it back to the main inventory, or drop it if full
+                if (!player.getInventory().add(chestItem)) {
+                    player.drop(chestItem, false);
+                }
+            }
+        }
+
+        if (hasEffect(player, "sneak_bonemeal_fov_change") && player.isCrouching() && player.tickCount % 20 == 0) { // Once per second while sneaking
+            BlockPos center = player.blockPosition().below();
+            for (BlockPos pos : BlockPos.betweenClosed(center.offset(-3, 0, -3), center.offset(3, 0, 3))) {
+                BlockState state = player.level().getBlockState(pos);
+                if (state.getBlock() instanceof BonemealableBlock bonemealable) {
+                    if (bonemealable.isValidBonemealTarget(player.level(), pos, state)) {
+                        bonemealable.performBonemeal((ServerLevel) player.level(), player.getRandom(), pos, state);
+                    }
+                }
+            }
+        }
 
         if (hasEffect(player, "random_food_no_jump")) {
             // Apply a jump debuff with a high enough amplifier to make jumping impossible.
@@ -629,17 +811,14 @@ public class ChoiceEffects {
         }
 
         if (hasEffect(player, "unbreakable_tools_netherite") && player.containerMenu instanceof CraftingMenu craftingMenu) {
-            // The 3x3 grid is slots 1-9. The center is slot 5.
             ItemStack centerItem = craftingMenu.getSlot(5).getItem();
 
             boolean patternMatches = !centerItem.isEmpty() && centerItem.isDamageableItem();
             if (patternMatches) {
-                // Check all surrounding slots in the 3x3 grid
                 for (int i = 1; i <= 9; i++) {
-                    if (i == 5) continue; // Skip the center slot
+                    if (i == 5) continue;
                     ItemStack slotItem = craftingMenu.getSlot(i).getItem();
-                    // Each surrounding slot must contain exactly 4 netherite ingots (32 total)
-                    if (!slotItem.is(Items.NETHERITE_BLOCK) || slotItem.getCount() != 4) {
+                    if (!slotItem.is(Items.NETHERITE_INGOT) || slotItem.getCount() != 4) {
                         patternMatches = false;
                         break;
                     }
@@ -648,16 +827,13 @@ public class ChoiceEffects {
 
             if (patternMatches) {
                 ItemStack unbreakableTool = centerItem.copy();
+                // Makes the item unbreakable but hides the "Unbreakable" tooltip
                 unbreakableTool.set(DataComponents.UNBREAKABLE, new Unbreakable(false));
+                // Adds the enchantment glint without adding any actual enchantments
+                unbreakableTool.set(DataComponents.ENCHANTMENT_GLINT_OVERRIDE, true);
 
-                // Add a glint to make it look special
-                var enchantRegistry = player.level().holderLookup(Registries.ENCHANTMENT);
-                unbreakableTool.enchant(enchantRegistry.getOrThrow(Enchantments.UNBREAKING), 1);
-
-                // Set the result in the result slot (index 0)
                 craftingMenu.getSlot(0).set(unbreakableTool);
             } else {
-                // If the pattern doesn't match, clear the result slot if it's our special item
                 ItemStack resultItem = craftingMenu.getSlot(0).getItem();
                 if (!resultItem.isEmpty() && resultItem.get(DataComponents.UNBREAKABLE) != null) {
                     craftingMenu.getSlot(0).set(ItemStack.EMPTY);
@@ -1111,11 +1287,20 @@ public class ChoiceEffects {
         if (hasEffect(player, "random_good_bad_potions")) {
             List<Holder<MobEffect>> goodEffects = BuiltInRegistries.MOB_EFFECT.holders().filter(h -> h.value().isBeneficial()).collect(Collectors.toList());
             List<Holder<MobEffect>> badEffects = BuiltInRegistries.MOB_EFFECT.holders().filter(h -> !h.value().isBeneficial()).collect(Collectors.toList());
+
             if(!goodEffects.isEmpty() && !badEffects.isEmpty()) {
-                player.addEffect(new MobEffectInstance(goodEffects.get(player.getRandom().nextInt(goodEffects.size())), 600));
-                player.addEffect(new MobEffectInstance(badEffects.get(player.getRandom().nextInt(badEffects.size())), 600));
+                Holder<MobEffect> goodEffect = goodEffects.get(player.getRandom().nextInt(goodEffects.size()));
+                Holder<MobEffect> badEffect = badEffects.get(player.getRandom().nextInt(badEffects.size()));
+
+                // --- NEW LOGIC: Choose a random amplifier (level) from 0-3, which corresponds to level I-IV ---
+                int goodAmplifier = player.getRandom().nextInt(4);
+                int badAmplifier = player.getRandom().nextInt(4);
+
+                player.addEffect(new MobEffectInstance(goodEffect, 600, goodAmplifier)); // 30 seconds
+                player.addEffect(new MobEffectInstance(badEffect, 600, badAmplifier));
             }
         }
+
         if (hasEffect(player, "daily_diamond")) {
             WyrSavedData savedData = WyrSavedData.get(player.serverLevel());
             int currentThirst = savedData.getPlayerThirst(player.getUUID());
@@ -1201,6 +1386,13 @@ public class ChoiceEffects {
 
     @SubscribeEvent
     public void onLivingHurt(LivingIncomingDamageEvent event) {
+
+        if (event.getSource().getEntity() instanceof Player player) {
+            // If that player has the effect, double their damage
+            if (hasEffect(player, "half_health_mobs_no_drops")) {
+                event.setAmount(event.getAmount() * 2);
+            }
+        }
         if(event.getEntity() instanceof Player player && hasEffect(player, "respawn_on_death_half_durability")) {
             respawnLocations.put(player.getUUID(), player.blockPosition());
             respawnDimensions.put(player.getUUID(), player.level().dimension());
@@ -1232,16 +1424,6 @@ public class ChoiceEffects {
                 }
             }
         }
-        if(event.getEntity() instanceof Creeper creeper && event.getSource().getEntity() instanceof Player player && hasEffect(player, "creeper_cake_no_fence_gates")) {
-            if(!creeper.level().isClientSide) {
-                for(int i = 0; i < 20; i++) {
-                    ItemEntity cake = new ItemEntity(creeper.level(), creeper.getX(), creeper.getY(), creeper.getZ(), new ItemStack(Items.CAKE));
-                    cake.setDeltaMovement(RandomSource.create().nextGaussian() * 0.2, 0.3, RandomSource.create().nextGaussian() * 0.2);
-                    creeper.level().addFreshEntity(cake);
-                }
-            }
-            event.setCanceled(true);
-        }
     }
 
     @SubscribeEvent
@@ -1259,12 +1441,69 @@ public class ChoiceEffects {
     }
 
     @SubscribeEvent
-    public void onPlayerDropItems(PlayerEvent.Clone event) {
-        if (hasEffect(event.getOriginal(), "respawn_on_death_half_durability") && event.isWasDeath()) {
-            for (int i = 0; i < event.getOriginal().getInventory().getContainerSize(); i++) {
-                ItemStack stack = event.getOriginal().getInventory().getItem(i);
-                if (stack.isDamageableItem()) stack.setDamageValue(stack.getDamageValue() + (stack.getMaxDamage() - stack.getDamageValue()) / 2);
+    public void onPlayerClone(PlayerEvent.Clone event) {
+        // This event fires when a player respawns
+        if (!event.isWasDeath()) return;
+
+        // Get the original player object before they died
+        ServerPlayer originalPlayer = (ServerPlayer) event.getOriginal();
+
+        // --- CORRECTED LOGIC ---
+        // We check the player's saved data instead of active effects, which is more reliable after death.
+        boolean hasHalfDurabilityEffect = PlayerChoiceTracker.getChoices(originalPlayer).stream()
+                .anyMatch(c -> c.getId().equals("respawn_on_death_half_durability"));
+
+        if (hasHalfDurabilityEffect) {
+            for (int i = 0; i < originalPlayer.getInventory().getContainerSize(); i++) {
+                ItemStack stack = originalPlayer.getInventory().getItem(i);
+                if (stack.isDamageableItem()) {
+                    // This calculation correctly halves the REMAINING durability
+                    // and handles the edge case of 1 durability left.
+                    int remainingDurability = stack.getMaxDamage() - stack.getDamageValue();
+                    int damageToAdd = remainingDurability / 2;
+                    stack.setDamageValue(stack.getDamageValue() + damageToAdd);
+                }
+                // Copy the modified item to the new player
                 event.getEntity().getInventory().setItem(i, stack);
+            }
+        }
+    }
+
+    @SubscribeEvent
+    public void onXpPickup(PlayerXpEvent.PickupXp event) {
+        if (hasEffect(event.getEntity(), "unbreakable_anvil_no_xp")) {
+            event.setCanceled(true); // Cancel the XP orb pickup
+        }
+    }
+
+    @SubscribeEvent
+    public void onExplosionStart(ExplosionEvent.Start event) {
+        // The method is now getDirectSourceEntity()
+        if (event.getExplosion().getDirectSourceEntity() instanceof Creeper creeper) {
+            Level level = event.getLevel();
+
+            // The method is getEntitiesOfClass() with no hyphen
+            boolean playerWithEffectIsNearby = !level.getEntitiesOfClass(
+                    Player.class,
+                    creeper.getBoundingBox().inflate(16),
+                    player -> hasEffect(player, "creeper_cake_no_fence_gates")
+            ).isEmpty();
+
+            if (playerWithEffectIsNearby) {
+                event.setCanceled(true);
+
+                if (!level.isClientSide) {
+                    level.playSound(null, creeper.getX(), creeper.getY(), creeper.getZ(), SoundEvents.GENERIC_EXPLODE, SoundSource.BLOCKS, 4.0F, (1.0F + (level.random.nextFloat() - level.random.nextFloat()) * 0.2F) * 0.7F);
+                    ((ServerLevel)level).sendParticles(ParticleTypes.EXPLOSION_EMITTER, creeper.getX(), creeper.getY(), creeper.getZ(), 1, 0, 0, 0, 0);
+
+                    for (int i = 0; i < 20; i++) {
+                        ItemEntity cake = new ItemEntity(level, creeper.getX(), creeper.getY(), creeper.getZ(), new ItemStack(Items.CAKE));
+                        cake.setDeltaMovement(RandomSource.create().nextGaussian() * 0.2, 0.3, RandomSource.create().nextGaussian() * 0.2);
+                        level.addFreshEntity(cake);
+                    }
+
+                    creeper.discard();
+                }
             }
         }
     }
@@ -1308,28 +1547,39 @@ public class ChoiceEffects {
 
     @SubscribeEvent
     public void onEntityJoinWorld(EntityJoinLevelEvent event) {
-        // Apply 2x health to ALL living entities except other players
         if (event.getEntity() instanceof LivingEntity entity && !(entity instanceof Player)) {
             entity.level().players().forEach(player -> {
-                if (hasEffect(player, "see_mob_hp_double_health") || hasEffect(player, "triple_loot_triple_health")) {
-                    AttributeInstance health = entity.getAttribute(Attributes.MAX_HEALTH);
-                    if (health != null) {
-                        ResourceLocation modifierId = ResourceLocation.fromNamespaceAndPath(WYR.MODID, "health_mod_" + player.getUUID());
-                        health.removeModifier(modifierId);
-                        double multiplier = hasEffect(player, "triple_loot_triple_health") ? 2.0 : 1.0;
-                        if (hasEffect(player, "half_health_mobs_no_drops")) multiplier = -0.5;
-                        health.addPermanentModifier(new AttributeModifier(modifierId, multiplier, AttributeModifier.Operation.ADD_MULTIPLIED_TOTAL));
-                        entity.setHealth(entity.getMaxHealth());
-                    }
+                AttributeInstance health = entity.getAttribute(Attributes.MAX_HEALTH);
+                if (health == null) return;
+
+                // Use a more specific modifier ID to prevent conflicts between effects
+                ResourceLocation modifierId = ResourceLocation.fromNamespaceAndPath(WYR.MODID, "health_mod_" + player.getUUID() + "_" + entity.getType().getDescriptionId());
+                health.removeModifier(modifierId);
+
+                // This logic now applies 2x health to ALL mobs for this effect
+                if (hasEffect(player, "see_mob_hp_double_health")) {
+                    health.addPermanentModifier(new AttributeModifier(modifierId, 1.0, AttributeModifier.Operation.ADD_MULTIPLIED_TOTAL));
                 }
+
+                // --- THIS IS THE CORRECTED LOGIC ---
+                // The check for "instanceof Animal" has been removed, so this now applies 3x health to ALL mobs.
+                if (hasEffect(player, "triple_loot_triple_health")) {
+                    // An Operation of ADD_MULTIPLIED_TOTAL with a value of 2.0 results in 3x total health (100% base + 200% bonus).
+                    health.addPermanentModifier(new AttributeModifier(modifierId, 2.0, AttributeModifier.Operation.ADD_MULTIPLIED_TOTAL));
+                }
+
+                // Update the entity's health to its new max health
+                entity.setHealth(entity.getMaxHealth());
             });
         }
     }
 
     @SubscribeEvent
     public void onAnimalTame(AnimalTameEvent event) {
+
         if (event.getTamer() instanceof Player player && event.getAnimal() instanceof Wolf wolf && hasEffect(player, "strong_wolves_one_hp")) {
             AttributeInstance health = wolf.getAttribute(Attributes.MAX_HEALTH);
+
             if (health != null) {
                 health.addPermanentModifier(new AttributeModifier(WOLF_HEALTH_MODIFIER_ID, -health.getBaseValue() + 1, AttributeModifier.Operation.ADD_VALUE));
             }
@@ -1367,6 +1617,19 @@ public class ChoiceEffects {
 
         ItemStack stack = event.getItemStack();
         Entity target = event.getTarget();
+
+        if (hasEffect(player, "instant_tame_creeper_hiss") && target instanceof TamableAnimal animal) {
+            // Check if the animal can be tamed with the item and isn't already tamed
+            if (animal.isFood(stack) && !animal.isTame()) {
+                if (!player.isCreative()) {
+                    stack.shrink(1); // Consume the taming item
+                }
+                animal.tame(player); // Force the tame to succeed
+                animal.level().broadcastEntityEvent(animal, (byte)7); // Show heart particles
+                event.setCanceled(true); // Cancel the original interaction
+                return; // Stop processing since we handled the tame
+            }
+        }
 
         // --- Corrected Logic for "wool_stack_random_crosshair" ---
         if (hasEffect(player, "wool_stack_random_crosshair") && target instanceof Sheep sheep && stack.getItem() instanceof ShearsItem) {
@@ -1479,16 +1742,30 @@ public class ChoiceEffects {
         if (hasEffect(player, "insta_grow_bread_only") && !level.isClientSide) {
             BlockState state = level.getBlockState(pos);
             Block block = state.getBlock();
-            if (block instanceof SaplingBlock || block instanceof CropBlock) {
+
+            // Logic for Saplings
+            if (block instanceof SaplingBlock sapling) {
+                event.setCanceled(true); // Stop the default bonemeal action
+                if (!player.isCreative()) {
+                    event.getStack().shrink(1); // Consume the bonemeal
+                }
+                // This is the correct, public method to trigger tree growth.
+                // It uses the vanilla logic to generate a full tree.
+                sapling.performBonemeal((ServerLevel) level, player.getRandom(), pos, state);
+                return;
+            }
+
+            // Logic for Crops
+            if (block instanceof CropBlock crop) {
                 event.setCanceled(true);
-                if (block instanceof BonemealableBlock bonemealable) {
-                    while (bonemealable.isValidBonemealTarget(level, pos, level.getBlockState(pos))) {
-                        bonemealable.performBonemeal((ServerLevel) level, player.getRandom(), pos, level.getBlockState(pos));
-                    }
+                // The variable was incorrect. It should be 'crop'.
+                while (crop.isValidBonemealTarget(level, pos, level.getBlockState(pos))) {
+                    crop.performBonemeal((ServerLevel) level, player.getRandom(), pos, level.getBlockState(pos));
                 }
                 if (!player.isCreative()) {
                     event.getStack().shrink(1);
                 }
+                return;
             }
         }
     }

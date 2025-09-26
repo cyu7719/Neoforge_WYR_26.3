@@ -4,7 +4,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
-import net.minecraft.core.registries.Registries; // NEW IMPORT
+import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
@@ -22,27 +22,37 @@ public class BiomeSelectionScreen extends Screen {
 
     public BiomeSelectionScreen() {
         super(Component.literal("Choose Your Starting Biome"));
-        // The biome list will be populated in the init() method
     }
 
     @Override
     protected void init() {
-        // --- FIX: Get the biome registry correctly and sort the keys ---
         if (this.minecraft != null && this.minecraft.level != null) {
             this.allBiomes = this.minecraft.level.registryAccess().registryOrThrow(Registries.BIOME).holders()
                     .map(holder -> holder.unwrapKey().orElseThrow())
                     .sorted(Comparator.comparing(ResourceKey::location))
                     .collect(Collectors.toList());
         }
-        // --- END FIX ---
 
-        this.biomeList = new BiomeList(this.minecraft, this.width, this.height - 60, 30, 20);
+        // The height is increased to fill the space where the button was
+        this.biomeList = new BiomeList(this.minecraft, this.width, this.height - 38, 30, 20);
         this.addRenderableWidget(this.biomeList);
 
-        this.addRenderableWidget(Button.builder(Component.literal("Cancel"), (button) -> this.onClose())
-                .bounds(this.width / 2 - 100, this.height - 28, 200, 20)
-                .build());
+        // The "Cancel" button has been removed.
     }
+
+    // --- NEW METHODS to lock the screen ---
+    @Override
+    public void onClose() {
+        // Do nothing when onClose is called, preventing the screen from closing.
+    }
+
+    @Override
+    public boolean shouldCloseOnEsc() {
+        // Return false to disable closing the screen with the Escape key.
+        return false;
+    }
+    // --- END OF NEW METHODS ---
+
 
     @Override
     public void render(GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
@@ -71,6 +81,7 @@ public class BiomeSelectionScreen extends Screen {
                 String biomeName = biomeKey.location().getNamespace() + ":" + biomeKey.location().getPath();
                 this.selectButton = Button.builder(Component.literal(biomeName), (button) -> {
                     PacketDistributor.sendToServer(new PacketChooseBiome(biomeKey.location()));
+                    // This will now call our new, empty onClose() method
                     BiomeSelectionScreen.this.onClose();
                 }).build();
             }

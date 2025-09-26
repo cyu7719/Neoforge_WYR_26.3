@@ -7,6 +7,9 @@ public class ClientEffectCache {
     private static int scrambleState = 0;
     private static boolean hasRandomSounds = false;
     private static boolean hasRandomShader = false;
+    private static boolean hasFovChange = false;
+    private static boolean hasLowRenderDistance = false;
+    private static boolean isMuted = false;
 
     public static void setHasStackedLogs(boolean status) {
         hasStackedLogs = status;
@@ -40,5 +43,17 @@ public class ClientEffectCache {
     }
     public static boolean hasRandomShader() {
         return hasRandomShader;
+    }
+
+    public static void setHasFovChange(boolean status) { hasFovChange = status; }
+    public static boolean hasFovChange() { return hasFovChange; }
+    public static void setHasLowRenderDistance(boolean status) { hasLowRenderDistance = status; }
+    public static boolean hasLowRenderDistance() { return hasLowRenderDistance; }
+
+    public static void setMuted(boolean status) {
+        isMuted = status;
+    }
+    public static boolean isMuted() {
+        return isMuted;
     }
 }

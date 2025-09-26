@@ -109,9 +109,13 @@ sourceSets.main.resources { srcDir 'src/generated/resources' }
 // "optional", meaning it will not be pulled by dependents of this mod.
 configurations {
     runtimeClasspath.extendsFrom localRuntime
+    annotationProcessor.extendsFrom compileOnly
 }
 
 dependencies {
+    // Make sure these two lines are in your dependencies.
+    // Replace '0.8.5' with your desired Mixin version if needed.
+    compileOnly "org.spongepowered:mixin:${project.mixin_version}"
     annotationProcessor "org.spongepowered:mixin:${project.mixin_version}"
     // Example optional mod dependency with JEI
     // The JEI API is declared for compile time use, while the full JEI artifact is used at runtime

@@ -62,8 +62,13 @@ public class PlayerChoiceTracker {
             boolean hasSeeMobHp = false;
             boolean hasRandomSounds = false;
             boolean hasRandomShader = false;
+            boolean hasFovChange = false; // Add flag
+            boolean hasLowRenderDistance = false;
+            boolean isMuted = false;
 
             for (Choice choice : choices) {
+
+                if ("fast_swim_muted".equals(choice.getId())) isMuted = true;
 
                 if ("no_hunger_random_shader".equals(choice.getId())) hasRandomShader = true;
 
@@ -85,6 +90,13 @@ public class PlayerChoiceTracker {
             PacketDistributor.sendToPlayer(player, new PacketSyncStackedLogsStatus(hasStackedLogs));
             PacketDistributor.sendToPlayer(player, new PacketSyncSeeMobHpStatus(hasSeeMobHp));
             PacketDistributor.sendToPlayer(player, new net.coba.wyr.PacketSyncShaderStatus(hasRandomShader));
+            PacketDistributor.sendToPlayer(player, new PacketSyncStackedLogsStatus(hasStackedLogs));
+            PacketDistributor.sendToPlayer(player, new PacketSyncSeeMobHpStatus(hasSeeMobHp));
+            PacketDistributor.sendToPlayer(player, new PacketSyncRandomSoundsStatus(hasRandomSounds));
+            PacketDistributor.sendToPlayer(player, new PacketSyncShaderStatus(hasRandomShader));
+            PacketDistributor.sendToPlayer(player, new PacketSyncFovChangeStatus(hasFovChange));
+            PacketDistributor.sendToPlayer(player, new PacketSyncRenderDistanceStatus(hasLowRenderDistance));
+            PacketDistributor.sendToPlayer(player, new PacketSyncMuteStatus(isMuted));
 
             if (isPromptPending(player)) {
                 List<Choice> newChoices = ChoiceRegistry.getFilteredRandomChoicesForPlayer(player);

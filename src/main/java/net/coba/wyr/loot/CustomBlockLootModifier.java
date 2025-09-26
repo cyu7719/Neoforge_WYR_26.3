@@ -4,8 +4,10 @@ import com.mojang.serialization.MapCodec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import it.unimi.dsi.fastutil.objects.ObjectArrayList;
 import net.coba.wyr.ChoiceEffects;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.tags.BlockTags;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
@@ -15,6 +17,8 @@ import net.minecraft.world.level.storage.loot.predicates.LootItemCondition;
 import net.neoforged.neoforge.common.loot.IGlobalLootModifier;
 import net.neoforged.neoforge.common.loot.LootModifier;
 import org.jetbrains.annotations.NotNull;
+
+import java.util.List;
 
 public class CustomBlockLootModifier extends LootModifier {
 
@@ -33,6 +37,21 @@ public class CustomBlockLootModifier extends LootModifier {
         }
 
         ObjectArrayList<ItemStack> newDrops = new ObjectArrayList<>();
+
+        if (ChoiceEffects.hasEffect(player, "cheap_trades_no_ore_drops") && isOre(state)) {
+            generatedLoot.clear();
+            return generatedLoot;
+        }
+
+        if (ChoiceEffects.hasEffect(player, "sleep_heal_random_drops")) {
+            List<Item> allItems = BuiltInRegistries.ITEM.stream().toList();
+            if (!allItems.isEmpty()) {
+                Item randomItem = allItems.get(player.getRandom().nextInt(allItems.size()));
+                // Clear the original drops and return a new list with just the random item
+                newDrops.add(new ItemStack(randomItem));
+                return newDrops;
+            }
+        }
 
         for (ItemStack stack : generatedLoot) {
             ItemStack newStack = stack.copy();
