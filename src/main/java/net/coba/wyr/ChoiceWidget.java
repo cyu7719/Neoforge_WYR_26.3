@@ -1,25 +1,27 @@
 package net.coba.wyr;
 
-import com.mojang.blaze3d.systems.RenderSystem;
+import java.util.List;
+
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.narration.NarrationElementOutput;
+import net.minecraft.client.input.MouseButtonEvent;
+import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.ResourceLocation;
-import java.util.List;
+import net.minecraft.resources.Identifier;
 
 public class ChoiceWidget extends AbstractWidget {
 
     private boolean selected = false;
-    private final ResourceLocation defaultTexture;
-    private final ResourceLocation hoverTexture;
-    private final ResourceLocation selectedTexture;
+    private final Identifier defaultTexture;
+    private final Identifier hoverTexture;
+    private final Identifier selectedTexture;
     private final Runnable onPress;
     private final boolean isPositive; // To determine text color
 
     public ChoiceWidget(int x, int y, int width, int height, Component message,
-                        ResourceLocation defaultTex, ResourceLocation hoverTex, ResourceLocation selectedTex,
+                        Identifier defaultTex, Identifier hoverTex, Identifier selectedTex,
                         Runnable onPress, boolean isPositive) {
         super(x, y, width, height, message);
         this.defaultTexture = defaultTex;
@@ -34,13 +36,13 @@ public class ChoiceWidget extends AbstractWidget {
     }
 
     @Override
-    public void onClick(double mouseX, double mouseY) {
+    public void onClick(MouseButtonEvent event, boolean doubleClick) {
         this.onPress.run();
     }
 
     @Override
-    public void renderWidget(GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
-        ResourceLocation currentTexture = defaultTexture;
+    protected void extractWidgetRenderState(GuiGraphicsExtractor guiGraphics, int mouseX, int mouseY, float partialTick) {
+        Identifier currentTexture = defaultTexture;
         if (selected) {
             currentTexture = selectedTexture;
         } else if (isHoveredOrFocused()) {
@@ -48,9 +50,7 @@ public class ChoiceWidget extends AbstractWidget {
         }
 
         // Draw the base texture for the choice box
-        RenderSystem.enableBlend();
-        guiGraphics.blit(currentTexture, this.getX(), this.getY(), 0, 0, this.width, this.height, this.width, this.height);
-        RenderSystem.disableBlend();
+        guiGraphics.blit(RenderPipelines.GUI_TEXTURED, currentTexture, this.getX(), this.getY(), 0.0F, 0.0F, this.width, this.height, this.width, this.height);
 
         // Draw the text inside
         if (this.getMessage() != null) {
@@ -64,7 +64,7 @@ public class ChoiceWidget extends AbstractWidget {
             for (net.minecraft.util.FormattedCharSequence line : lines) {
                 int textX = this.getX() + (this.getWidth() - Minecraft.getInstance().font.width(line)) / 2;
                 // Draw with a shadow for better readability
-                guiGraphics.drawString(Minecraft.getInstance().font, line, textX, startY, textColor, true);
+                guiGraphics.text(Minecraft.getInstance().font, line, textX, startY, textColor, true);
                 startY += Minecraft.getInstance().font.lineHeight;
             }
         }

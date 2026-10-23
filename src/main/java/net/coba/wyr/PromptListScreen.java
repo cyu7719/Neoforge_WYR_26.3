@@ -2,10 +2,12 @@ package net.coba.wyr;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.input.MouseButtonEvent;
+import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.util.FormattedCharSequence;
 import net.minecraft.util.Mth;
 
@@ -13,10 +15,10 @@ import java.util.List;
 
 public class PromptListScreen extends Screen {
 
-    private static final ResourceLocation TEXTURE = ResourceLocation.fromNamespaceAndPath(WYR.MODID, "textures/gui/prompt_list.png");
+    private static final Identifier TEXTURE = Identifier.fromNamespaceAndPath(WYR.MODID, "textures/gui/prompt_list.png");
     private static final int GUI_WIDTH = 256;
     private static final int GUI_HEIGHT = 256;
-    private static final int TEXT_COLOR = 0xFFFFFF;
+    private static final int TEXT_COLOR = 0xFFFFFFFF;
 
     // --- Layout Constants ---
     private static final int LIST_TOP_Y_OFFSET = 10;
@@ -66,15 +68,14 @@ public class PromptListScreen extends Screen {
     }
 
     @Override
-    public void render(GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
-        super.render(guiGraphics, mouseX, mouseY, partialTick);
-        this.renderBackground(guiGraphics, mouseX, mouseY, partialTick);
+    public void extractRenderState(GuiGraphicsExtractor guiGraphics, int mouseX, int mouseY, float partialTick) {
+        super.extractRenderState(guiGraphics, mouseX, mouseY, partialTick);
 
         Font font = Minecraft.getInstance().font;
         int left = (this.width - GUI_WIDTH) / 2;
         int top = (this.height - GUI_HEIGHT) / 2;
 
-        guiGraphics.blit(TEXTURE, left, top, 0, 0, GUI_WIDTH, GUI_HEIGHT);
+        guiGraphics.blit(RenderPipelines.GUI_TEXTURED, TEXTURE, left, top, 0.0F, 0.0F, GUI_WIDTH, GUI_HEIGHT, 256, 256);
 
         int listTop = top + LIST_TOP_Y_OFFSET + LIST_Y_ADJUSTMENT;
         int listBottom = top + GUI_HEIGHT - LIST_BOTTOM_Y_OFFSET;
@@ -121,18 +122,16 @@ public class PromptListScreen extends Screen {
         }
     }
 
-    private void renderLeftAlignedWordWrap(GuiGraphics guiGraphics, Font font, Component text, int columnX, int startY) {
+    private void renderLeftAlignedWordWrap(GuiGraphicsExtractor guiGraphics, Font font, Component text, int columnX, int startY) {
         List<FormattedCharSequence> lines = font.split(text, TEXT_WRAP_WIDTH);
         int y = startY;
         for (FormattedCharSequence line : lines) {
-            guiGraphics.drawString(font, line, columnX, y, TEXT_COLOR, false);
+            guiGraphics.text(font, line, columnX, y, TEXT_COLOR, false);
             y += font.lineHeight;
         }
     }
 
-    // ... (rest of the file is unchanged) ...
-
-    private void renderScrollbar(GuiGraphics guiGraphics, int left, int top) {
+    private void renderScrollbar(GuiGraphicsExtractor guiGraphics, int left, int top) {
         int scrollbarY = top + SCROLLBAR_TOP_Y_OFFSET;
         int scrollbarHeight = GUI_HEIGHT - SCROLLBAR_TOP_Y_OFFSET - SCROLLBAR_BOTTOM_Y_OFFSET;
         int scrollbarX = left + SCROLLBAR_X_OFFSET;
@@ -155,7 +154,7 @@ public class PromptListScreen extends Screen {
     }
 
     @Override
-    public boolean mouseClicked(double mouseX, double mouseY, int button) {
+    public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
         int left = (this.width - GUI_WIDTH) / 2;
         int top = (this.height - GUI_HEIGHT) / 2;
 
@@ -163,20 +162,20 @@ public class PromptListScreen extends Screen {
         int scrollbarY = top + SCROLLBAR_TOP_Y_OFFSET;
         int scrollbarHeight = GUI_HEIGHT - SCROLLBAR_TOP_Y_OFFSET - SCROLLBAR_BOTTOM_Y_OFFSET;
 
-        if (contentHeight > this.listHeight && mouseX >= scrollbarX && mouseX < scrollbarX + 6 && mouseY >= scrollbarY && mouseY < scrollbarY + scrollbarHeight) {
+        if (contentHeight > this.listHeight && event.x() >= scrollbarX && event.x() < scrollbarX + 6 && event.y() >= scrollbarY && event.y() < scrollbarY + scrollbarHeight) {
             this.isDragging = true;
         }
-        return super.mouseClicked(mouseX, mouseY, button);
+        return super.mouseClicked(event, doubleClick);
     }
 
     @Override
-    public boolean mouseReleased(double mouseX, double mouseY, int button) {
+    public boolean mouseReleased(MouseButtonEvent event) {
         this.isDragging = false;
-        return super.mouseReleased(mouseX, mouseY, button);
+        return super.mouseReleased(event);
     }
 
     @Override
-    public boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
+    public boolean mouseDragged(MouseButtonEvent event, double dragX, double dragY) {
         int scrollbarHeight = GUI_HEIGHT - SCROLLBAR_TOP_Y_OFFSET - SCROLLBAR_BOTTOM_Y_OFFSET;
 
         if (this.isDragging && contentHeight > this.listHeight) {
@@ -189,7 +188,7 @@ public class PromptListScreen extends Screen {
             }
             return true;
         }
-        return super.mouseDragged(mouseX, mouseY, button, dragX, dragY);
+        return super.mouseDragged(event, dragX, dragY);
     }
 
     @Override

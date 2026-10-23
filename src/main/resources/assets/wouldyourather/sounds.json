@@ -11,10 +11,41 @@
     ],
     "subtitle": "subtitle.wouldyourather.tame_hiss"
   },
-  "auto_smelt_knock": {
+  "auto_random_sound": {
     "sounds": [
-      "wouldyourather:custom/knocking_on_door"
-    ],
-    "subtitle": "subtitle.wouldyourather.auto_smelt_knock"
+      "wouldyourather:custom/random_sounds/r1",
+      "wouldyourather:custom/random_sounds/cb",
+      "wouldyourather:custom/random_sounds/fight",
+      "wouldyourather:custom/random_sounds/amongus",
+      "wouldyourather:custom/random_sounds/tmp",
+      "wouldyourather:custom/random_sounds/animewow",
+      "wouldyourather:custom/random_sounds/ohmygod",
+      "wouldyourather:custom/random_sounds/wtdd",
+      "wouldyourather:custom/random_sounds/laugh",
+      "wouldyourather:custom/random_sounds/nani",
+      "wouldyourather:custom/random_sounds/ugotthat",
+      "wouldyourather:custom/random_sounds/bruh",
+      "wouldyourather:custom/random_sounds/mansnoring",
+      "wouldyourather:custom/random_sounds/ok",
+      "wouldyourather:custom/random_sounds/emotionaldamage",
+      "wouldyourather:custom/random_sounds/iamsteve",
+      "wouldyourather:custom/random_sounds/youwhat",
+      "wouldyourather:custom/random_sounds/iluminati",
+      "wouldyourather:custom/random_sounds/areyousureaboutthat",
+      "wouldyourather:custom/random_sounds/ahshitherewegoagain",
+      "wouldyourather:custom/random_sounds/skillissue",
+      "wouldyourather:custom/random_sounds/msugd",
+      "wouldyourather:custom/random_sounds/imindanger",
+      "wouldyourather:custom/random_sounds/shrekswamp",
+      "wouldyourather:custom/random_sounds/surprisemadafaka",
+      "wouldyourather:custom/random_sounds/lvlcompletegdash",
+      "wouldyourather:custom/random_sounds/pray",
+      "wouldyourather:custom/random_sounds/youstupid",
+      "wouldyourather:custom/random_sounds/dammmn",
+      "wouldyourather:custom/random_sounds/goffyahhphone",
+      "wouldyourather:custom/random_sounds/deeznuts",
+      "wouldyourather:custom/random_sounds/chickenjockey",
+      "wouldyourather:custom/random_sounds/wdnc"
+    ]
   }
 }

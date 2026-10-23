@@ -3,7 +3,7 @@ package net.coba.wyr;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.neoforge.network.handling.IPayloadContext;
 
@@ -11,7 +11,7 @@ import net.neoforged.neoforge.network.handling.IPayloadContext;
 public record PacketTeleport() implements CustomPacketPayload {
 
     // The unique ID for this packet type
-    public static final Type<PacketTeleport> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(WYR.MODID, "teleport"));
+    public static final Type<PacketTeleport> TYPE = new Type<>(Identifier.fromNamespaceAndPath(WYR.MODID, "teleport"));
 
     // The new StreamCodec handles writing and reading the packet data from the network buffer.
     // For a packet with no fields, we use .unit(), which handles an empty payload.

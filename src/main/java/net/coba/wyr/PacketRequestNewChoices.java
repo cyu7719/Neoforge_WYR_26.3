@@ -4,7 +4,7 @@ package net.coba.wyr;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.neoforge.network.PacketDistributor;
 import net.neoforged.neoforge.network.handling.IPayloadContext;
@@ -13,7 +13,7 @@ import java.util.List;
 
 public record PacketRequestNewChoices() implements CustomPacketPayload {
 
-    public static final Type<PacketRequestNewChoices> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(WYR.MODID, "request_new_choices"));
+    public static final Type<PacketRequestNewChoices> TYPE = new Type<>(Identifier.fromNamespaceAndPath(WYR.MODID, "request_new_choices"));
     public static final StreamCodec<FriendlyByteBuf, PacketRequestNewChoices> STREAM_CODEC = StreamCodec.unit(new PacketRequestNewChoices());
 
     @Override
@@ -24,13 +24,16 @@ public record PacketRequestNewChoices() implements CustomPacketPayload {
     public static void handle(PacketRequestNewChoices message, IPayloadContext context) {
         context.enqueueWork(() -> {
             if (context.player() instanceof ServerPlayer serverPlayer) {
-                // Server-side check: Only send choices if the player is under the 20 prompt limit.
-                if (PlayerChoiceTracker.getPromptCount(serverPlayer) < 20) {
+                // Server-side check: Only send choices if the player is under the 40 prompt limit.
+                if (PlayerChoiceTracker.getPromptCount(serverPlayer) < 40) {
                     List<Choice> choices = ChoiceRegistry.getFilteredRandomChoicesForPlayer(serverPlayer);
                     if (!choices.isEmpty()) {
-                        // --- MODIFICATION: Set pending status before sending ---
                         PlayerChoiceTracker.setPromptPending(serverPlayer, true);
-                        PacketDistributor.sendToPlayer(serverPlayer, new PacketSyncNewChoices(choices));
+                        // Convert Choice objects to choice IDs for the packet
+                        List<String> choiceIds = choices.stream()
+                            .map(Choice::getId)
+                            .toList();
+                        PacketDistributor.sendToPlayer(serverPlayer, new PacketSyncNewChoices(choiceIds));
                     }
                 } else {
                     // If the limit is reached, send an empty list. The client will not open the GUI.

@@ -8,6 +8,7 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.neoforge.client.event.ClientTickEvent;
 import net.neoforged.neoforge.network.PacketDistributor;
+import net.neoforged.neoforge.client.network.ClientPacketDistributor;
 
 public class ClientPhasingHandler {
     private int cooldown = 0;
@@ -37,7 +38,7 @@ public class ClientPhasingHandler {
                     wallStateHead.isCollisionShapeFullBlock(player.level(), wallPosHead)) {
 
                 // ...send a packet to the server and start the cooldown.
-                PacketDistributor.sendToServer(new PacketAttemptPhase());
+                ClientPacketDistributor.sendToServer(new PacketAttemptPhase());
                 cooldown = 5; // 5-tick cooldown (quarter of a second)
             }
         }

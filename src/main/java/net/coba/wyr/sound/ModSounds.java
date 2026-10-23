@@ -2,7 +2,7 @@ package net.coba.wyr.sound;
 
 import net.coba.wyr.WYR;
 import net.minecraft.core.registries.Registries;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.sounds.SoundEvent;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.neoforge.registries.DeferredHolder;
@@ -19,11 +19,11 @@ public class ModSounds {
     public static final DeferredHolder<SoundEvent, SoundEvent> creeper_hiss =
             registerSoundEvent("tame_hiss");
 
-    public static final DeferredHolder<SoundEvent, SoundEvent> auto_smelt_knock =
-            registerSoundEvent("auto_smelt_knock");
+    public static final DeferredHolder<SoundEvent, SoundEvent> auto_random_sound =
+            registerSoundEvent("auto_random_sound");
 
     private static DeferredHolder<SoundEvent, SoundEvent> registerSoundEvent(String name) {
-        ResourceLocation id = ResourceLocation.fromNamespaceAndPath(WYR.MODID, name);
+        Identifier id = Identifier.fromNamespaceAndPath(WYR.MODID, name);
         return SOUND_EVENTS.register(name, () -> SoundEvent.createVariableRangeEvent(id));
     }
 

@@ -16,7 +16,7 @@ import static net.coba.wyr.ClientEffectCache.hasRandomSounds;
 public class PlayerChoiceTracker {
 
     private static WyrSavedData getSavedData(ServerPlayer player) {
-        return WyrSavedData.get(player.serverLevel());
+        return WyrSavedData.get((net.minecraft.server.level.ServerLevel) player.level());
     }
 
     public static void addChoice(ServerPlayer player, Choice choice) {
@@ -57,51 +57,26 @@ public class PlayerChoiceTracker {
     @SubscribeEvent
     public void onPlayerLoggedIn(PlayerEvent.PlayerLoggedInEvent event) {
         if (event.getEntity() instanceof ServerPlayer player) {
+            WYR.LOGGER.info("Player logged in: {} - reapplying effects and syncing", player.getName().getString());
+            // Get all saved choices for the player
             List<Choice> choices = getChoices(player);
-            boolean hasStackedLogs = false;
-            boolean hasSeeMobHp = false;
-            boolean hasRandomSounds = false;
-            boolean hasRandomShader = false;
-            boolean hasFovChange = false; // Add flag
-            boolean hasLowRenderDistance = false;
-            boolean isMuted = false;
 
+            // Re-apply all persistent server-side effects. This updates the in-memory state.
             for (Choice choice : choices) {
-
-                if ("fast_swim_muted".equals(choice.getId())) isMuted = true;
-
-                if ("no_hunger_random_shader".equals(choice.getId())) hasRandomShader = true;
-
-                if ("hero_of_village_random_sounds".equals(choice.getId())) {
-                    hasRandomSounds = true;
-                }
-
-                // MODIFICATION: Call the reapply method to avoid giving items again
-                ChoiceEffects.reapplyPersistentEffect(player, choice.getId());
-                if ("stacked_logs".equals(choice.getId())) {
-                    hasStackedLogs = true;
-                }
-                if ("see_mob_hp_double_health".equals(choice.getId())) {
-                    hasSeeMobHp = true;
-                }
+                ChoiceEffects.applyEffect(player, choice.getId(), false);
             }
 
-            PacketDistributor.sendToPlayer(player, new PacketSyncRandomSoundsStatus(hasRandomSounds));
-            PacketDistributor.sendToPlayer(player, new PacketSyncStackedLogsStatus(hasStackedLogs));
-            PacketDistributor.sendToPlayer(player, new PacketSyncSeeMobHpStatus(hasSeeMobHp));
-            PacketDistributor.sendToPlayer(player, new net.coba.wyr.PacketSyncShaderStatus(hasRandomShader));
-            PacketDistributor.sendToPlayer(player, new PacketSyncStackedLogsStatus(hasStackedLogs));
-            PacketDistributor.sendToPlayer(player, new PacketSyncSeeMobHpStatus(hasSeeMobHp));
-            PacketDistributor.sendToPlayer(player, new PacketSyncRandomSoundsStatus(hasRandomSounds));
-            PacketDistributor.sendToPlayer(player, new PacketSyncShaderStatus(hasRandomShader));
-            PacketDistributor.sendToPlayer(player, new PacketSyncFovChangeStatus(hasFovChange));
-            PacketDistributor.sendToPlayer(player, new PacketSyncRenderDistanceStatus(hasLowRenderDistance));
-            PacketDistributor.sendToPlayer(player, new PacketSyncMuteStatus(isMuted));
+            ChoiceEffects.syncAllClientEffects(player);
 
+            // Handle any pending prompts.
             if (isPromptPending(player)) {
                 List<Choice> newChoices = ChoiceRegistry.getFilteredRandomChoicesForPlayer(player);
                 if (!newChoices.isEmpty()) {
-                    PacketDistributor.sendToPlayer(player, new PacketSyncNewChoices(newChoices));
+                    // Convert Choice objects to choice IDs for the packet
+                    List<String> choiceIds = newChoices.stream()
+                        .map(Choice::getId)
+                        .toList();
+                    PacketDistributor.sendToPlayer(player, new PacketSyncNewChoices(choiceIds));
                 } else {
                     setPromptPending(player, false);
                 }

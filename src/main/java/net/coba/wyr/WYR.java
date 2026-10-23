@@ -1,6 +1,8 @@
 package net.coba.wyr;
 
 import com.mojang.logging.LogUtils;
+import net.coba.wyr.inventory.ModMenuTypes;
+import net.coba.wyr.item.ModArmorMaterials;
 import net.coba.wyr.item.ModItems;
 import net.coba.wyr.sound.ModSounds;
 import net.neoforged.bus.api.IEventBus;
@@ -11,9 +13,10 @@ import net.neoforged.fml.event.lifecycle.FMLCommonSetupEvent;
 import net.neoforged.fml.loading.FMLLoader;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.BuildCreativeModeTabContentsEvent;
+import net.neoforged.neoforge.event.RegisterCommandsEvent;
 import net.neoforged.neoforge.event.server.ServerStartingEvent;
+import net.neoforged.neoforge.event.server.ServerStoppedEvent;
 import org.slf4j.Logger;
-import net.coba.wyr.loot.ModLootModifiers;
 import net.minecraft.server.MinecraftServer;
 
 @Mod(WYR.MODID)
@@ -26,29 +29,26 @@ public class WYR {
 
     public WYR(IEventBus modEventBus, ModContainer modContainer) {
         // --- Register logic that runs on BOTH client and server ---
-        NeoForge.EVENT_BUS.register(new PromptManager());
         NeoForge.EVENT_BUS.register(new ChoiceEffects());
         NeoForge.EVENT_BUS.register(new PlayerChoiceTracker());
 
+        ModDataComponents.DATA_COMPONENTS.register(modEventBus);
         ModItems.register(modEventBus);
+        ModMenuTypes.register(modEventBus);
 
-        ModLootModifiers.register(modEventBus);
+        ModArmorMaterials.register(modEventBus);
 
         Networking.register(modEventBus);
 
         ModSounds.register(modEventBus);
 
-        // Register the main class itself for server events
+        ClientPopupManager.init();
+        ClientHangWatchdog.init();
+
         NeoForge.EVENT_BUS.register(this);
 
-        // Add listeners for common setup events
         modEventBus.addListener(this::commonSetup);
         modEventBus.addListener(this::addCreative);
-
-        if (FMLLoader.getDist().isClient()) {
-            ClientOnlySetup.init(modEventBus);
-            NeoForge.EVENT_BUS.register(new ClientPhasingHandler());
-        }
     }
 
     public static MinecraftServer getServer() {
@@ -62,7 +62,17 @@ public class WYR {
     }
 
     @SubscribeEvent
+    public void onRegisterCommands(RegisterCommandsEvent event) {
+        WyrCommands.register(event.getDispatcher(), event.getBuildContext());
+    }
+
+    @SubscribeEvent
     public void onServerStarting(ServerStartingEvent event) {
-        WyrCommands.register(event.getServer().getCommands().getDispatcher());
+        serverInstance = event.getServer();
+    }
+
+    @SubscribeEvent
+    public void onServerStopped(ServerStoppedEvent event) {
+        serverInstance = null;
     }
 }

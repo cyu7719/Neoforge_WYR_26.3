@@ -8,17 +8,17 @@ import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceKey;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.biome.Biome;
 import net.minecraft.world.level.levelgen.Heightmap;
 import net.neoforged.neoforge.network.handling.IPayloadContext;
 
-public record PacketChooseBiome(ResourceLocation biomeId) implements CustomPacketPayload {
-    public static final Type<PacketChooseBiome> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(WYR.MODID, "choose_biome"));
+public record PacketChooseBiome(Identifier biomeId) implements CustomPacketPayload {
+    public static final Type<PacketChooseBiome> TYPE = new Type<>(Identifier.fromNamespaceAndPath(WYR.MODID, "choose_biome"));
     public static final StreamCodec<FriendlyByteBuf, PacketChooseBiome> STREAM_CODEC = StreamCodec.composite(
-            ResourceLocation.STREAM_CODEC,
+            Identifier.STREAM_CODEC,
             PacketChooseBiome::biomeId,
             PacketChooseBiome::new
     );
@@ -31,16 +31,28 @@ public record PacketChooseBiome(ResourceLocation biomeId) implements CustomPacke
     public static void handle(PacketChooseBiome message, IPayloadContext context) {
         context.enqueueWork(() -> {
             if (context.player() instanceof ServerPlayer player) {
-                ServerLevel level = player.serverLevel();
+                ServerLevel level = (net.minecraft.server.level.ServerLevel) player.level();
                 ResourceKey<Biome> biomeKey = ResourceKey.create(Registries.BIOME, message.biomeId());
 
-                level.registryAccess().registryOrThrow(Registries.BIOME).getHolder(biomeKey).ifPresent(biomeHolder -> {
-                    // --- FIX: Use a manual, reliable search method ---
+                level.registryAccess().lookupOrThrow(Registries.BIOME).get(biomeKey).ifPresent(biomeHolder -> {
                     BlockPos biomePos = findNearestBiome(level, player.blockPosition(), biomeHolder);
 
                     if (biomePos != null) {
+                        // Force the target chunk to load so the heightmap is accurate.
+                        level.getChunk(biomePos.getX() >> 4, biomePos.getZ() >> 4);
+
                         int surfaceY = level.getHeight(Heightmap.Types.MOTION_BLOCKING, biomePos.getX(), biomePos.getZ());
-                        player.teleportTo(level, biomePos.getX() + 0.5, surfaceY + 1.0, biomePos.getZ() + 0.5, player.getYRot(), player.getXRot());
+                        BlockPos safeSpawnPos = findSafeSurface(level, biomePos.getX(), surfaceY, biomePos.getZ());
+
+                        //Teleport the player
+                        player.teleportTo(level, safeSpawnPos.getX() + 0.5, safeSpawnPos.getY(), safeSpawnPos.getZ() + 0.5, java.util.Set.of(), player.getYRot(), player.getXRot(), false);
+
+                        //Set their respawn point (this is what the lock teleports them to)
+                        // Note: setRespawnPosition signature changed in 1.21.1, using alternative approach
+                        // player.setRespawnPosition(level.dimension(), safeSpawnPos, 0.0f, true, false);
+
+                        //Save the chosen biome as the "locked" biome
+                        ChoiceEffects.setSpawnBiomeLock(player, biomeKey, safeSpawnPos);
                     }
                 });
             }
@@ -77,5 +89,28 @@ public record PacketChooseBiome(ResourceLocation biomeId) implements CustomPacke
 
     private static BlockPos toBlockPos(int chunkX, int chunkZ, int y) {
         return new BlockPos(chunkX << 4, y, chunkZ << 4);
+    }
+
+    /**
+     * Finds a safe standing position at the surface: a solid block with two
+     * non-solid (air/replaceable) blocks above it for the player to occupy.
+     * Scans downward from the heightmap Y so the player doesn't spawn inside
+     * leaves, water, or floating blocks.
+     */
+    private static BlockPos findSafeSurface(ServerLevel level, int x, int startY, int z) {
+        int minY = level.getMinY();
+        for (int y = Math.min(startY, level.getMaxY() - 2); y > minY; y--) {
+            BlockPos ground = new BlockPos(x, y, z);
+            BlockPos feet = ground.above();
+            BlockPos head = feet.above();
+            boolean solidGround = level.getBlockState(ground).isSolidRender();
+            boolean feetClear = !level.getBlockState(feet).isSolidRender();
+            boolean headClear = !level.getBlockState(head).isSolidRender();
+            if (solidGround && feetClear && headClear) {
+                return feet;
+            }
+        }
+        // Fallback: just above the heightmap position.
+        return new BlockPos(x, startY + 1, z);
     }
 }

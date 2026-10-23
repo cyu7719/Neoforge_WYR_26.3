@@ -5,13 +5,13 @@ import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.neoforge.network.handling.IPayloadContext;
 
 public record PacketSetPromptInterval(int intervalTicks) implements CustomPacketPayload {
 
-    public static final Type<PacketSetPromptInterval> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(WYR.MODID, "set_prompt_interval"));
+    public static final Type<PacketSetPromptInterval> TYPE = new Type<>(Identifier.fromNamespaceAndPath(WYR.MODID, "set_prompt_interval"));
     public static final StreamCodec<FriendlyByteBuf, PacketSetPromptInterval> STREAM_CODEC = StreamCodec.composite(
             ByteBufCodecs.VAR_INT,
             PacketSetPromptInterval::intervalTicks,
@@ -26,7 +26,7 @@ public record PacketSetPromptInterval(int intervalTicks) implements CustomPacket
     public static void handle(PacketSetPromptInterval message, IPayloadContext context) {
         context.enqueueWork(() -> {
             if (context.player() instanceof ServerPlayer serverPlayer) {
-                WyrSavedData savedData = WyrSavedData.get(serverPlayer.serverLevel());
+                WyrSavedData savedData = WyrSavedData.get((net.minecraft.server.level.ServerLevel) serverPlayer.level());
                 int currentSavedInterval = savedData.getPlayerPromptInterval(serverPlayer.getUUID());
 
                 // If the client tries to set the interval to 0 ("Disabled") after a game restart,
@@ -50,7 +50,7 @@ public record PacketSetPromptInterval(int intervalTicks) implements CustomPacket
                     savedData.setNextPromptTime(serverPlayer.getUUID(), 0);
                 }
 
-                serverPlayer.serverLevel().getDataStorage().save();
+                // Save is automatic in 1.21.1
             }
         });
     }

@@ -1,7 +1,7 @@
 package net.coba.wyr;
 
 /**
- * A class to hold a pair of choices (positive and negative) and a unique identifier.
+ * A class to hold a pair of choices (positive and negative) and a unique Identifier.
  */
 public class Choice {
     private final String id;

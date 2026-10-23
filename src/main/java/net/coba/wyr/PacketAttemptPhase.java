@@ -5,7 +5,7 @@ import net.minecraft.core.Direction;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
@@ -13,7 +13,7 @@ import net.neoforged.neoforge.network.handling.IPayloadContext;
 
 public record PacketAttemptPhase() implements CustomPacketPayload {
 
-    public static final Type<PacketAttemptPhase> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(WYR.MODID, "attempt_phase"));
+    public static final Type<PacketAttemptPhase> TYPE = new Type<>(Identifier.fromNamespaceAndPath(WYR.MODID, "attempt_phase"));
     public static final StreamCodec<FriendlyByteBuf, PacketAttemptPhase> STREAM_CODEC = StreamCodec.unit(new PacketAttemptPhase());
 
     @Override
@@ -44,11 +44,7 @@ public record PacketAttemptPhase() implements CustomPacketPayload {
                     );
 
                     if (player.level().noCollision(player, destinationBox)) {
-                        player.teleportTo(
-                                destPos.getX() + 0.5,
-                                destPos.getY(),
-                                destPos.getZ() + 0.5
-                        );
+                        player.teleportTo(destPos.getX() + 0.5, destPos.getY(), destPos.getZ() + 0.5);
                     }
                 }
             }

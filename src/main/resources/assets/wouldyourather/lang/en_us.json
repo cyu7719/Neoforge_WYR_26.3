@@ -1,3 +1,15 @@
 {
-  "item.wouldyourather.unlimited_slice_of_pizza": "Unlimited Slice of Pizza"
+  "item.wouldyourather.unlimited_slice_of_pizza": "Unlimited Slice of Pizza",
+  "item.wouldyourather.unlimited_ice_cream": "Unlimited Ice Cream",
+  "item.wouldyourather.personal_teleporter": "Personal Teleporter",
+  "item.wouldyourather.golem_helmet": "Golem Helmet",
+  "item.wouldyourather.golem_chestplate": "Golem Chestplate",
+  "item.wouldyourather.golem_leggings": "Golem Leggings",
+  "item.wouldyourather.golem_boots": "Golem Boots",
+  "item.wouldyourather.pocket_teleporter": "Pocket Teleporter",
+  "item.wouldyourather.backpack": "Backpack",
+  "item.wouldyourather.unlimited_soda": "Unlimited Soda",
+  "key.categories.wouldyourather": "Would You Rather",
+  "key.categories.teleport": "Teleport",
+  "key.wouldyourather.teleport": "Ender teleport"
 }

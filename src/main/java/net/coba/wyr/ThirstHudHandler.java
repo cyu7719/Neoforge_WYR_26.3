@@ -1,18 +1,18 @@
 package net.coba.wyr;
 
-import com.mojang.blaze3d.systems.RenderSystem;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.renderer.RenderPipelines;
+import net.minecraft.resources.Identifier;
 import net.minecraft.world.entity.player.Player;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.neoforge.client.event.RenderGuiEvent;
 
 public class ThirstHudHandler {
 
-    private static final ResourceLocation THIRST_EMPTY = ResourceLocation.fromNamespaceAndPath(WYR.MODID, "textures/gui/thirst_empty.png");
-    private static final ResourceLocation THIRST_HALF = ResourceLocation.fromNamespaceAndPath(WYR.MODID, "textures/gui/thirst_half.png");
-    private static final ResourceLocation THIRST_FULL = ResourceLocation.fromNamespaceAndPath(WYR.MODID, "textures/gui/thirst_full.png");
+    private static final Identifier THIRST_EMPTY = Identifier.fromNamespaceAndPath(WYR.MODID, "textures/gui/thirst_empty.png");
+    private static final Identifier THIRST_HALF = Identifier.fromNamespaceAndPath(WYR.MODID, "textures/gui/thirst_half.png");
+    private static final Identifier THIRST_FULL = Identifier.fromNamespaceAndPath(WYR.MODID, "textures/gui/thirst_full.png");
 
     private static int playerThirst = 20;
 
@@ -25,7 +25,7 @@ public class ThirstHudHandler {
         Minecraft mc = Minecraft.getInstance();
         Player player = mc.player;
 
-        if (player == null || mc.options.hideGui) {
+        if (player == null || mc.gui.hud.isHidden()) {
             return;
         }
 
@@ -35,7 +35,7 @@ public class ThirstHudHandler {
         }
     }
 
-    private void renderThirstBar(GuiGraphics guiGraphics, Player player) {
+    private void renderThirstBar(GuiGraphicsExtractor guiGraphics, Player player) {
         int screenWidth = guiGraphics.guiWidth();
         int screenHeight = guiGraphics.guiHeight();
 
@@ -52,19 +52,17 @@ public class ThirstHudHandler {
             top = screenHeight - 49;
         }
 
-        RenderSystem.enableBlend();
         for (int i = 0; i < 10; ++i) {
             int x = left - i * 8 - 9;
-            guiGraphics.blit(THIRST_EMPTY, x, top, 0, 0, 9, 9, 9, 9);
+            guiGraphics.blit(RenderPipelines.GUI_TEXTURED, THIRST_EMPTY, x, top, 0.0F, 0.0F, 9, 9, 9, 9);
 
             if (playerThirst > 0) {
                 if (i * 2 + 1 < playerThirst) {
-                    guiGraphics.blit(THIRST_FULL, x, top, 0, 0, 9, 9, 9, 9);
+                    guiGraphics.blit(RenderPipelines.GUI_TEXTURED, THIRST_FULL, x, top, 0.0F, 0.0F, 9, 9, 9, 9);
                 } else if (i * 2 + 1 == playerThirst) {
-                    guiGraphics.blit(THIRST_HALF, x, top, 0, 0, 9, 9, 9, 9);
+                    guiGraphics.blit(RenderPipelines.GUI_TEXTURED, THIRST_HALF, x, top, 0.0F, 0.0F, 9, 9, 9, 9);
                 }
             }
         }
-        RenderSystem.disableBlend();
     }
 }

@@ -1,15 +1,16 @@
 package net.coba.wyr;
 
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceKey;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
+import net.minecraft.tags.BiomeTags;
 import net.minecraft.world.level.biome.Biome;
-import net.neoforged.neoforge.network.PacketDistributor;
+import net.neoforged.neoforge.client.network.ClientPacketDistributor;
 
 import java.util.Comparator;
 import java.util.List;
@@ -27,38 +28,32 @@ public class BiomeSelectionScreen extends Screen {
     @Override
     protected void init() {
         if (this.minecraft != null && this.minecraft.level != null) {
-            this.allBiomes = this.minecraft.level.registryAccess().registryOrThrow(Registries.BIOME).holders()
-                    .map(holder -> holder.unwrapKey().orElseThrow())
-                    .sorted(Comparator.comparing(ResourceKey::location))
+            this.allBiomes = this.minecraft.level.registryAccess().lookupOrThrow(Registries.BIOME)
+                    .listElements()
+                    .filter(holder -> holder.is(BiomeTags.IS_OVERWORLD))
+                    .map(holder -> holder.key())
+                    .sorted(Comparator.comparing(key -> key.identifier()))
                     .collect(Collectors.toList());
         }
 
-        // The height is increased to fill the space where the button was
         this.biomeList = new BiomeList(this.minecraft, this.width, this.height - 38, 30, 20);
         this.addRenderableWidget(this.biomeList);
-
-        // The "Cancel" button has been removed.
     }
 
-    // --- NEW METHODS to lock the screen ---
     @Override
     public void onClose() {
-        // Do nothing when onClose is called, preventing the screen from closing.
+        // This remains empty to prevent closing with ESC
     }
 
     @Override
     public boolean shouldCloseOnEsc() {
-        // Return false to disable closing the screen with the Escape key.
         return false;
     }
-    // --- END OF NEW METHODS ---
-
 
     @Override
-    public void render(GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
-        super.render(guiGraphics, mouseX, mouseY, partialTick);
-        this.biomeList.render(guiGraphics, mouseX, mouseY, partialTick);
-        guiGraphics.drawCenteredString(this.font, this.title, this.width / 2, 13, 0xFFFFFF);
+    public void extractRenderState(GuiGraphicsExtractor guiGraphics, int mouseX, int mouseY, float partialTick) {
+        super.extractRenderState(guiGraphics, mouseX, mouseY, partialTick);
+        this.biomeList.extractRenderState(guiGraphics, mouseX, mouseY, partialTick);
     }
 
     @Override
@@ -78,20 +73,24 @@ public class BiomeSelectionScreen extends Screen {
             private final Button selectButton;
 
             public Entry(ResourceKey<Biome> biomeKey) {
-                String biomeName = biomeKey.location().getNamespace() + ":" + biomeKey.location().getPath();
+                String biomeName = biomeKey.identifier().getNamespace() + ":" + biomeKey.identifier().getPath();
                 this.selectButton = Button.builder(Component.literal(biomeName), (button) -> {
-                    PacketDistributor.sendToServer(new PacketChooseBiome(biomeKey.location()));
-                    // This will now call our new, empty onClose() method
-                    BiomeSelectionScreen.this.onClose();
+                    ClientPacketDistributor.sendToServer(new PacketChooseBiome(biomeKey.identifier()));
+
+                    // --- THIS IS THE FIX ---
+                    // Instead of calling the blocked onClose(), we directly close the screen.
+                    Minecraft.getInstance().gui.setScreen(null);
+                    // --- END OF FIX ---
+
                 }).build();
             }
 
             @Override
-            public void render(GuiGraphics guiGraphics, int index, int top, int left, int width, int height, int mouseX, int mouseY, boolean isHovering, float partialTick) {
-                this.selectButton.setX(left + (width / 2) - 100);
-                this.selectButton.setY(top);
+            public void extractContent(final GuiGraphicsExtractor guiGraphics, int mouseX, int mouseY, boolean isHovering, float partialTick) {
+                this.selectButton.setX(this.getX() + (this.getWidth() / 2) - 100);
+                this.selectButton.setY(this.getY());
                 this.selectButton.setWidth(200);
-                this.selectButton.render(guiGraphics, mouseX, mouseY, partialTick);
+                this.selectButton.extractRenderState(guiGraphics, mouseX, mouseY, partialTick);
             }
 
             @Override

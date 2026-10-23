@@ -24,3 +24,12 @@ runs
 run-data
 
 repo
+# editor
+.vscode/
+
+# temp / decompiled sources
+_tmp/
+_tmp_mc/
+wyr_src_tmp/
+mc2612_sources/
+assets/

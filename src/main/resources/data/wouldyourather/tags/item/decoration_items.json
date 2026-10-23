@@ -1,0 +1,26 @@
+{
+  "replace": false,
+  "values": [
+    "#minecraft:wool",
+    "#minecraft:wool_carpets",
+    "#minecraft:beds",
+    "#minecraft:banners",
+    "#minecraft:candles",
+    "#minecraft:flowers",
+    "#minecraft:saplings",
+    "#minecraft:leaves",
+    "minecraft:glass",
+    "minecraft:glass_pane",
+    "minecraft:glowstone",
+    "minecraft:sea_lantern",
+    "minecraft:terracotta",
+    "minecraft:bookshelf",
+    "minecraft:painting",
+    "minecraft:item_frame",
+    "minecraft:glow_item_frame",
+    "minecraft:flower_pot",
+    "minecraft:lantern",
+    "minecraft:soul_lantern",
+    "minecraft:iron_chain"
+  ]
+}

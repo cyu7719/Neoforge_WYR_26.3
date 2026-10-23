@@ -2,23 +2,24 @@ package net.coba.wyr;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.ResourceLocation;
-import net.neoforged.neoforge.network.PacketDistributor;
+import net.minecraft.resources.Identifier;
+import net.neoforged.neoforge.client.network.ClientPacketDistributor;
 
 import java.util.List;
 
 public class WyrScreen extends Screen {
 
     // --- Texture Definitions ---
-    private static final ResourceLocation TEXTURE_DEFAULT = ResourceLocation.fromNamespaceAndPath(WYR.MODID, "textures/gui/choices.png");
-    private static final ResourceLocation TEXTURE_LEFT_HIGHLIGHT = ResourceLocation.fromNamespaceAndPath(WYR.MODID, "textures/gui/left_highlighted.png");
-    private static final ResourceLocation TEXTURE_LEFT_SELECTED = ResourceLocation.fromNamespaceAndPath(WYR.MODID, "textures/gui/left_selected.png");
-    private static final ResourceLocation TEXTURE_RIGHT_HIGHLIGHT = ResourceLocation.fromNamespaceAndPath(WYR.MODID, "textures/gui/right_highlighted.png");
-    private static final ResourceLocation TEXTURE_RIGHT_SELECTED = ResourceLocation.fromNamespaceAndPath(WYR.MODID, "textures/gui/right_selected.png");
+    private static final Identifier TEXTURE_DEFAULT = Identifier.fromNamespaceAndPath(WYR.MODID, "textures/gui/choices.png");
+    private static final Identifier TEXTURE_LEFT_HIGHLIGHT = Identifier.fromNamespaceAndPath(WYR.MODID, "textures/gui/left_highlighted.png");
+    private static final Identifier TEXTURE_LEFT_SELECTED = Identifier.fromNamespaceAndPath(WYR.MODID, "textures/gui/left_selected.png");
+    private static final Identifier TEXTURE_RIGHT_HIGHLIGHT = Identifier.fromNamespaceAndPath(WYR.MODID, "textures/gui/right_highlighted.png");
+    private static final Identifier TEXTURE_RIGHT_SELECTED = Identifier.fromNamespaceAndPath(WYR.MODID, "textures/gui/right_selected.png");
 
     // --- GUI LAYOUT CONSTANTS ---
     // These values MUST match the exact pixel dimensions of your main GUI background image.
@@ -82,9 +83,11 @@ public class WyrScreen extends Screen {
         this.confirmButton = this.addRenderableWidget(Button.builder(Component.literal("Confirm"), btn -> {
             if (selectedSide != -1 && Minecraft.getInstance().player != null) {
                 Choice selectedChoice = choices.get(selectedSide);
-                PacketDistributor.sendToServer(new PacketApplyEffect(selectedChoice.getId()));
+                ClientPacketDistributor.sendToServer(new PacketApplyEffect(selectedChoice.getId()));
                 PromptManager.resetAndResumeTimer();
-                this.onClose();
+                if (!selectedChoice.getId().equals("choose_spawn_biome_lock")) {
+                    this.onClose();
+                }
             }
         }).bounds(this.width / 2 - 50, top + GUI_HEIGHT + 8, 100, 20).build());
         this.confirmButton.active = false;
@@ -102,19 +105,17 @@ public class WyrScreen extends Screen {
     }
 
     @Override
-    public void render(GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
-        this.renderBackground(guiGraphics, mouseX, mouseY, partialTick);
-
+    public void extractRenderState(GuiGraphicsExtractor guiGraphics, int mouseX, int mouseY, float partialTick) {
         // Calculate the top-left corner of the GUI for positioning all elements
         int left = (this.width - GUI_WIDTH) / 2;
         int top = (this.height - GUI_HEIGHT) / 2;
 
 
         // Render the vanilla widgets (e.g., the Confirm button) on top of everything else.
-        super.render(guiGraphics, mouseX, mouseY, partialTick);
+        super.extractRenderState(guiGraphics, mouseX, mouseY, partialTick);
 
         // Always draw the default background texture first.
-        guiGraphics.blit(TEXTURE_DEFAULT, left, top, 0, 0, GUI_WIDTH, GUI_HEIGHT, GUI_WIDTH, GUI_HEIGHT);
+        guiGraphics.blit(RenderPipelines.GUI_TEXTURED, TEXTURE_DEFAULT, left, top, 0.0F, 0.0F, GUI_WIDTH, GUI_HEIGHT, GUI_WIDTH, GUI_HEIGHT);
 
 
         // Calculate the absolute screen coordinates for the overlays using the offsets.
@@ -124,16 +125,16 @@ public class WyrScreen extends Screen {
 
         // Draw the highlight or selection texture for the left panel if needed.
         if (selectedSide == 0) {
-            guiGraphics.blit(TEXTURE_LEFT_SELECTED, leftOverlayX, overlayY, 0, 0, OVERLAY_WIDTH, OVERLAY_HEIGHT, OVERLAY_WIDTH, OVERLAY_HEIGHT);
+            guiGraphics.blit(RenderPipelines.GUI_TEXTURED, TEXTURE_LEFT_SELECTED, leftOverlayX, overlayY, 0.0F, 0.0F, OVERLAY_WIDTH, OVERLAY_HEIGHT, OVERLAY_WIDTH, OVERLAY_HEIGHT);
         } else if (leftPanel.isHoveredOrFocused()) {
-            guiGraphics.blit(TEXTURE_LEFT_HIGHLIGHT, leftOverlayX, overlayY, 0, 0, OVERLAY_WIDTH, OVERLAY_HEIGHT, OVERLAY_WIDTH, OVERLAY_HEIGHT);
+            guiGraphics.blit(RenderPipelines.GUI_TEXTURED, TEXTURE_LEFT_HIGHLIGHT, leftOverlayX, overlayY, 0.0F, 0.0F, OVERLAY_WIDTH, OVERLAY_HEIGHT, OVERLAY_WIDTH, OVERLAY_HEIGHT);
         }
 
         // Draw the highlight or selection texture for the right panel if needed.
         if (selectedSide == 1) {
-            guiGraphics.blit(TEXTURE_RIGHT_SELECTED, rightOverlayX, overlayY, 0, 0, OVERLAY_WIDTH, OVERLAY_HEIGHT, OVERLAY_WIDTH, OVERLAY_HEIGHT);
+            guiGraphics.blit(RenderPipelines.GUI_TEXTURED, TEXTURE_RIGHT_SELECTED, rightOverlayX, overlayY, 0.0F, 0.0F, OVERLAY_WIDTH, OVERLAY_HEIGHT, OVERLAY_WIDTH, OVERLAY_HEIGHT);
         } else if (rightPanel.isHoveredOrFocused()) {
-            guiGraphics.blit(TEXTURE_RIGHT_HIGHLIGHT, rightOverlayX, overlayY, 0, 0, OVERLAY_WIDTH, OVERLAY_HEIGHT, OVERLAY_WIDTH, OVERLAY_HEIGHT);
+            guiGraphics.blit(RenderPipelines.GUI_TEXTURED, TEXTURE_RIGHT_HIGHLIGHT, rightOverlayX, overlayY, 0.0F, 0.0F, OVERLAY_WIDTH, OVERLAY_HEIGHT, OVERLAY_WIDTH, OVERLAY_HEIGHT);
         }
 
 
@@ -145,7 +146,7 @@ public class WyrScreen extends Screen {
 
     }
 
-    private void renderChoiceText(GuiGraphics guiGraphics, Choice choice, int panelX, int panelY) {
+    private void renderChoiceText(GuiGraphicsExtractor guiGraphics, Choice choice, int panelX, int panelY) {
         Font font = Minecraft.getInstance().font;
         int textColor = 0xFFFFFFFF;
 
@@ -155,10 +156,10 @@ public class WyrScreen extends Screen {
         int negativeTextY = panelY + NEGATIVE_TEXT_Y_OFFSET;
 
         // Render the positive text (top box)
-        guiGraphics.drawWordWrap(font, Component.literal(choice.positive()), textX, positiveTextY, TEXT_WRAP_WIDTH, textColor);
+        guiGraphics.textWithWordWrap(font, Component.literal(choice.positive()), textX, positiveTextY, TEXT_WRAP_WIDTH, textColor);
 
         // Render the negative text (bottom box)
-        guiGraphics.drawWordWrap(font, Component.literal(choice.negative()), textX, negativeTextY, TEXT_WRAP_WIDTH, textColor);
+        guiGraphics.textWithWordWrap(font, Component.literal(choice.negative()), textX, negativeTextY, TEXT_WRAP_WIDTH, textColor);
     }
 
     @Override

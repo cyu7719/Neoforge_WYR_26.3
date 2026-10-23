@@ -21,12 +21,8 @@ public class UnlimitedPizzaItem extends Item {
     @Override
     public ItemStack finishUsingItem(ItemStack stack, Level level, LivingEntity entity) {
         if (entity instanceof Player player) {
-            FoodProperties foodProperties = this.getFoodProperties(stack, player);
-            if (foodProperties != null) {
-                // Manually apply the food's nutritional value to the player.
-                // The correct method to get the saturation modifier is .saturation()
-                player.getFoodData().eat(foodProperties.nutrition(), foodProperties.saturation());
-            }
+            // Restore 3 hunger and saturation
+            player.getFoodData().eat(3, 3.0F);
         }
         // Return the original stack to prevent it from being consumed.
         return stack;

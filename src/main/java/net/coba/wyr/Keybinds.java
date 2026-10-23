@@ -10,24 +10,28 @@ import net.neoforged.neoforge.client.settings.KeyConflictContext;
  */
 public class Keybinds {
     // A unique category name for the keybinds in the Controls menu.
-    public static final String KEY_CATEGORY_WYR = "Would You Rather";
+    public static final String KEY_CATEGORY_WYR = "key.categories.wouldyourather";
     // The name for the teleport keybind itself.
     public static final String KEY_TELEPORT = "Teleport";
     public static final String KEY_PROMPT_LIST = "Prompt List";
+    public static final String KEY_OPEN_BACKPACK = "Open Backpack";
 
     // The actual KeyMapping object. This is what Minecraft uses to track the key.
-    // We set a default key (T) and specify it should only be active when in-game.
     public static final KeyMapping TELEPORT_KEY = new KeyMapping(
-            KEY_TELEPORT,
-            KeyConflictContext.IN_GAME,
-            InputConstants.getKey(InputConstants.KEY_T, -1),
-            KEY_CATEGORY_WYR
+            "key.wouldyourather.teleport",
+            InputConstants.KEY_G,
+            KeyMapping.Category.MISC
     );
 
     public static final KeyMapping PROMPT_LIST_KEY = new KeyMapping(
-            KEY_PROMPT_LIST,
-            KeyConflictContext.IN_GAME,
-            InputConstants.getKey(InputConstants.KEY_K, -1), // Default to K
-            KEY_CATEGORY_WYR
+            "key.wouldyourather.prompt_list",
+            InputConstants.KEY_K,
+            KeyMapping.Category.MISC
+    );
+
+    public static final KeyMapping OPEN_BACKPACK_KEY = new KeyMapping(
+            "key.wouldyourather.open_backpack",
+            InputConstants.KEY_B,
+            KeyMapping.Category.MISC
     );
 }

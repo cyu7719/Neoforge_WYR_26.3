@@ -25,8 +25,8 @@ public class PromptManager {
     }
 
     private void showPreviousChoiceScreen() {
-        if (Minecraft.getInstance().screen == null && lastShownChoices != null) {
-            Minecraft.getInstance().setScreen(new WyrScreen(lastShownChoices));
+        if (Minecraft.getInstance().gui.screen() == null && lastShownChoices != null) {
+            Minecraft.getInstance().gui.setScreen(new WyrScreen(lastShownChoices));
         }
     }
 
@@ -40,7 +40,7 @@ public class PromptManager {
         if (player != null && player.isDeadOrDying()) {
             if (WyrScreen.isWyrScreenOpen) {
                 shouldShowOnRespawn = true;
-                Minecraft.getInstance().setScreen(null);
+                Minecraft.getInstance().gui.setScreen(null);
                 WyrScreen.isWyrScreenOpen = false;
             }
         }

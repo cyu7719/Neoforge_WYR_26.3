@@ -4,13 +4,13 @@ import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.neoforged.neoforge.network.handling.IPayloadContext;
 
 // Packet from Server to Client
 public record PacketSyncThirst(int thirstLevel) implements CustomPacketPayload {
 
-    public static final Type<PacketSyncThirst> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(WYR.MODID, "sync_thirst"));
+    public static final Type<PacketSyncThirst> TYPE = new Type<>(Identifier.fromNamespaceAndPath(WYR.MODID, "sync_thirst"));
 
     public static final StreamCodec<FriendlyByteBuf, PacketSyncThirst> STREAM_CODEC = StreamCodec.composite(
             ByteBufCodecs.VAR_INT,
