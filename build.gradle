@@ -1,3 +1,5 @@
+import javax.inject.Inject
+
 plugins {
     id 'java'
     id 'eclipse'
@@ -101,28 +103,35 @@ tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'
 }
 
-tasks.register('gitPush') {
-    description = 'Commits and pushes all changes to GitHub.'
-    group = 'version control'
+tasks.register('gitPush', GitPushTask)
 
-    doLast {
-        exec {
+tasks.named('build') {
+    finalizedBy 'gitPush'
+}
+
+abstract class GitPushTask extends DefaultTask {
+    @Inject
+    abstract ExecOperations getExecOperations()
+
+    @TaskAction
+    void run() {
+        execOperations.exec {
             commandLine 'git', 'add', '-A'
         }
 
-        def hasStagedChanges = exec {
+        boolean hasStagedChanges = execOperations.exec {
             commandLine 'git', 'diff', '--cached', '--quiet'
             ignoreExitValue = true
         }.exitValue != 0
 
         if (hasStagedChanges) {
-            exec {
+            execOperations.exec {
                 commandLine 'git', 'commit', '-m',
                         "Auto-commit from gradlew build (${new Date().format('yyyy-MM-dd HH:mm')})"
             }
         }
 
-        def pushExit = exec {
+        int pushExit = execOperations.exec {
             commandLine 'git', 'push'
             ignoreExitValue = true
         }.exitValue
@@ -131,8 +140,4 @@ tasks.register('gitPush') {
             logger.warn 'git push failed (auth or network?). Build itself is unaffected.'
         }
     }
-}
-
-tasks.named('build') {
-    finalizedBy 'gitPush'
 }
